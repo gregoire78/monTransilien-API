@@ -19,6 +19,9 @@ function getSncfRealTimeApi(uic) {
 			username: SNCFAPI_USERNAME,
 			password: SNCFAPI_PWD
 		},
+		headers: {
+			'Accept': 'application/vnd.sncf.transilien.od.depart+xml;vers=1'
+		},
 		responseType: 'text'
 	});
 }
@@ -53,12 +56,11 @@ function getResultTrain(sid, t, train, service) {
 			//})
 
 		} else {
-
 			gtfs.getTrips({
 				agency_key: 'sncf-routes',
 				service_id: service.toString(),
-				trip_headsign: isNaN(train.number) ? train.name : {$regex: ""},
-				trip_id: !isNaN(train.number) ? {$regex: new RegExp(`DUASN${train.number}`)} : {$regex: ""}
+				//trip_headsign: isNaN(train.number) ? train.name : {$regex: ""},
+				trip_id: {$regex: new RegExp(`DUASN${train.number}`)}
 			})
 			.then(trip => {trip_infos = trip[0]}, () => resolve(['error trip id']))
 			.then(() => gtfs.getStoptimes({
@@ -68,7 +70,10 @@ function getResultTrain(sid, t, train, service) {
 			}))
 			.then(stopTimes => {
 				train.aimedDepartureTime = moment(stopTimes[0].departure_time, "kk:mm:ss"); //kk heure format 01-24 à la plce de HH 00-23
-			})
+				if(moment(train.aimedDepartureTime).diff(moment(train.expectedDepartureTime), 'd') > 0){ // verifications horaires chevauchement entre deux jours
+					train.aimedDepartureTime = moment(stopTimes[0].departure_time, "kk:mm:ss").add(1, 'd');
+				}
+			}, () => resolve(['error get stoptime station', trip_infos]))
 			.then(() => gtfs.getStoptimes({
 				agency_key: 'sncf-routes',
 				trip_id: trip_infos.trip_id
@@ -81,7 +86,7 @@ function getResultTrain(sid, t, train, service) {
 					}), 'nom_gare_sncf');
 					dessertes.push({uic7: parseInt(v.stop_id.replace("StopPoint:DUA","")), name: gareName, dep_time: moment(v.departure_time, "kk:mm:ss").format('LT')});
 				});
-			})
+			}, () => resolve(trip_infos))
 			.then(() => gtfs.getRoutes({
 				agency_key: 'sncf-routes',
 				route_id: trip_infos.route_id
@@ -125,8 +130,8 @@ function getService(t, sid) {
 
 		gtfs.getTrips({
 			agency_key: 'sncf-routes',
-			trip_headsign: isNaN(train.number) ? train.name : {$regex: ""},
-			trip_id: !isNaN(train.number) ? {$regex: new RegExp(`DUASN${train.number}`)} : {$regex: ""}
+			//trip_headsign: isNaN(train.number) ? train.name : {$regex: ""},
+			trip_id: {$regex: new RegExp(`DUASN${('0' + train.number).slice(-6)}`)}
 		})
 		.then(results => {
 			services = [];
@@ -166,7 +171,6 @@ function getService(t, sid) {
 					}
 				}
 			});
-			console.log(train.number, services_i)
 			return services_i;
 		})
 		.then(service => getResultTrain(sid, t, train, service))
@@ -190,7 +194,7 @@ module.exports = Trains = {
 
 		// test multiple promise result
 		getPassageAPI
-		.then(() => Promise.all(sncfPassages.train.slice(0,4).map(train => getService(train, parseInt(sncfPassages.$.gare.slice(0, -1))))))
+		.then(() => Promise.all(sncfPassages.train.slice(0,6).map(train => getService(train, parseInt(sncfPassages.$.gare.slice(0, -1))))))
 		.then(services => {
 			const station_name = _.result(_.find(gares, function (obj) {
 				return obj.uic7 === parseInt(sncfPassages.$.gare.slice(0, -1));
