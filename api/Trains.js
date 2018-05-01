@@ -97,7 +97,7 @@ function getResultTrain(sid, t, train, service) {
 						id: route_infos.route_id,
 						line: route_infos.route_short_name,
 						long_name: route_infos.route_long_name,
-						color: route_infos.route_color
+						color: "#"+route_infos.route_color
 					};
 					//train.line = line_infos;
 					resolve(train);
@@ -110,7 +110,7 @@ function getResultTrain(sid, t, train, service) {
 function getService(t, sid) {
 	const train = {
 		name: t.miss.toString(),
-		number: t.num.toString(),
+		number: parseInt(t.num.toString()),
 		terminus: _.result(_.find(gares, function (obj) {
 			return obj.uic7 === parseInt(t.term.toString().slice(0, -1));
 		}), 'nom_gare_sncf'),
