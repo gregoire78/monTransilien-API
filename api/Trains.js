@@ -57,9 +57,10 @@ function getResultTrain(sid, t, train, service) {
 			gtfs.getTrips({
 				agency_key: 'sncf-routes',
 				service_id: service.toString(),
-				trip_id: {$regex: new RegExp(`DUASN${train.number}`)}
+				trip_headsign: isNaN(train.number) ? train.name : {$regex: ""},
+				trip_id: !isNaN(train.number) ? {$regex: new RegExp(`DUASN${train.number}`)} : {$regex: ""}
 			})
-			.then(trip => trip_infos = trip[0], () => resolve(['error trip id']))
+			.then(trip => {trip_infos = trip[0]}, () => resolve(['error trip id']))
 			.then(() => gtfs.getStoptimes({
 				agency_key: 'sncf-routes',
 				trip_id: trip_infos.trip_id,
@@ -110,7 +111,7 @@ function getResultTrain(sid, t, train, service) {
 function getService(t, sid) {
 	const train = {
 		name: t.miss.toString(),
-		number: parseInt(t.num.toString()),
+		number: t.num.toString(),
 		terminus: _.result(_.find(gares, function (obj) {
 			return obj.uic7 === parseInt(t.term.toString().slice(0, -1));
 		}), 'nom_gare_sncf'),
@@ -121,10 +122,11 @@ function getService(t, sid) {
 	return new Promise((resolve, reject) => {
 		let services = [];
 		let services_i = [];
-		
+
 		gtfs.getTrips({
 			agency_key: 'sncf-routes',
-			trip_id: {$regex: new RegExp(`DUASN${train.number}`)}
+			trip_headsign: isNaN(train.number) ? train.name : {$regex: ""},
+			trip_id: !isNaN(train.number) ? {$regex: new RegExp(`DUASN${train.number}`)} : {$regex: ""}
 		})
 		.then(results => {
 			services = [];
@@ -157,8 +159,14 @@ function getService(t, sid) {
 				if(v.exception_type === 1){
 					services_i = [ v.service_id ];
 					return false;
+				} else if(v.exception_type === 2){
+					var index = services_i.indexOf(v.service_id);
+					if (index > -1) {
+						services_i.splice(index, 1);
+					}
 				}
 			});
+			console.log(train.number, services_i)
 			return services_i;
 		})
 		.then(service => getResultTrain(sid, t, train, service))
