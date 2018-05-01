@@ -60,8 +60,9 @@ function getResultTrain(sid, t, train, service) {
 				agency_key: 'sncf-routes',
 				service_id: service.toString(),
 				//trip_headsign: isNaN(train.number) ? train.name : {$regex: ""},
-				trip_id: {$regex: new RegExp(`DUASN${train.number}`)}
+				trip_id: {$regex: new RegExp(`DUASN${('0' + train.number).slice(-6)}`)}
 			})
+			.then(results => paireVSimpaire(results, train.number, service))
 			.then(trip => {trip_infos = trip[0]}, () => resolve(['error trip id']))
 			.then(() => gtfs.getStoptimes({
 				agency_key: 'sncf-routes',
@@ -113,6 +114,22 @@ function getResultTrain(sid, t, train, service) {
 	});
 }
 
+function paireVSimpaire (results, number, service = null){
+	return new Promise((resolve) => {
+		if(_.isEmpty(results)){
+			gtfs.getTrips({
+				agency_key: 'sncf-routes',
+				service_id: service ? service.toString() :  {$regex: ""},
+				//trip_headsign: isNaN(train.number) ? train.name : {$regex: ""},
+				trip_id: {$regex: new RegExp(`DUASN${('0' + (number % 2 == 1 ? number - 1 : number)).slice(-6)}`)}
+			})
+			.then(response => resolve(response))
+		} else {
+			resolve(results)
+		}
+	});
+}
+
 function getService(t, sid) {
 	const train = {
 		name: t.miss.toString(),
@@ -133,6 +150,7 @@ function getService(t, sid) {
 			//trip_headsign: isNaN(train.number) ? train.name : {$regex: ""},
 			trip_id: {$regex: new RegExp(`DUASN${('0' + train.number).slice(-6)}`)}
 		})
+		.then(results => paireVSimpaire(results, train.number))
 		.then(results => {
 			services = [];
 			_.forEach(results, (v,k) => {
@@ -194,7 +212,7 @@ module.exports = Trains = {
 
 		// test multiple promise result
 		getPassageAPI
-		.then(() => Promise.all(sncfPassages.train.slice(0,6).map(train => getService(train, parseInt(sncfPassages.$.gare.slice(0, -1))))))
+		.then(() => Promise.all(sncfPassages.train.slice(0,4).map(train => getService(train, parseInt(sncfPassages.$.gare.slice(0, -1))))))
 		.then(services => {
 			const station_name = _.result(_.find(gares, function (obj) {
 				return obj.uic7 === parseInt(sncfPassages.$.gare.slice(0, -1));
