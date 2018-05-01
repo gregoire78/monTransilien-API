@@ -66,7 +66,7 @@ function getResultTrain(sid, t, train, service) {
 				stop_id: "StopPoint:DUA"+sid
 			}))
 			.then(stopTimes => {
-				train.aimedDepartureTime = moment(stopTimes[0].departure_time, "HH:mm:ss");
+				train.aimedDepartureTime = moment(stopTimes[0].departure_time, "kk:mm:ss"); //kk heure format 01-24 à la plce de HH 00-23
 			})
 			.then(() => gtfs.getStoptimes({
 				agency_key: 'sncf-routes',
@@ -78,7 +78,7 @@ function getResultTrain(sid, t, train, service) {
 					const gareName = _.result(_.find(gares, function(obj) {
 						return obj.uic7 === parseInt(v.stop_id.replace("StopPoint:DUA",""));
 					}), 'nom_gare_sncf');
-					dessertes.push({uic7: parseInt(v.stop_id.replace("StopPoint:DUA","")), name: gareName, dep_time: moment(v.departure_time, "HH:mm:ss").format('LT')});
+					dessertes.push({uic7: parseInt(v.stop_id.replace("StopPoint:DUA","")), name: gareName, dep_time: moment(v.departure_time, "kk:mm:ss").format('LT')});
 				});
 			})
 			.then(() => gtfs.getRoutes({
@@ -93,7 +93,12 @@ function getResultTrain(sid, t, train, service) {
 					resolve(['error get desserte'])
 				else {
 					train.journey = dessertes;
-					train.route = route_infos;
+					train.route = {
+						id: route_infos.route_id,
+						line: route_infos.route_short_name,
+						long_name: route_infos.route_long_name,
+						color: route_infos.route_color
+					};
 					//train.line = line_infos;
 					resolve(train);
 				}
@@ -102,8 +107,8 @@ function getResultTrain(sid, t, train, service) {
 	});
 }
 
-var getService = function getService(t, sid) {
-	var train = {
+function getService(t, sid) {
+	const train = {
 		name: t.miss.toString(),
 		number: t.num.toString(),
 		terminus: _.result(_.find(gares, function (obj) {
@@ -114,8 +119,8 @@ var getService = function getService(t, sid) {
 	};
 	
 	return new Promise((resolve, reject) => {
-		var services = [];
-		var services_i = [];
+		let services = [];
+		let services_i = [];
 		
 		gtfs.getTrips({
 			agency_key: 'sncf-routes',
@@ -126,7 +131,7 @@ var getService = function getService(t, sid) {
 			_.forEach(results, (v,k) => {
 				services.push(v.service_id);
 			});
-			var opt = {
+			const opt = {
 				agency_key: 'sncf-routes',
 				start_date: {$lte: parseInt(moment(train.expectedDepartureTime).format('YYYYMMDD'))},
 				end_date: {$gte: parseInt(moment(train.expectedDepartureTime).format('YYYYMMDD'))},
@@ -185,19 +190,10 @@ module.exports = Trains = {
 			const sncf = {
 				station: station_name,
 				trains: services.map((t, k) => {
-					var infos = sncfPassages.train[k];
-					var late = moment(t.expectedDepartureTime).diff(moment(t.aimedDepartureTime), "m");
 					if(_.isArray(t.journey)){ // si il y a un service
-						var txt = `Le train ${t.name} n°${t.number} prévu à ${moment(t.expectedDepartureTime).format("HH[h]mm")} et à destination de ${t.terminus} ${t.state ? `est ${t.state.toLowerCase()}` : `partira de la gare de ${station_name} ${moment(t.aimedDepartureTime).fromNow()}`}`;
+						const late = moment(t.expectedDepartureTime).diff(moment(t.aimedDepartureTime), "m");
+						let ok = false;
 						t.late = (late !== 0 ? `${(late<0?"":"+") + late} min` : "à l'heure" );
-						t.aimedDepartureTime =  moment(t.aimedDepartureTime).format('LT');
-						t.route = {
-							id: t.route.route_id,
-							line: t.route.route_short_name,
-							long_name: t.route.route_long_name,
-							color: t.route.route_color
-						};
-						var ok = false;
 						t.journey = _.compact(_.map(t.journey, (o) => {		// recevoir seulement la suite
 							if (ok) {
 								if (o.name == t.terminus) {
@@ -209,11 +205,12 @@ module.exports = Trains = {
 						}));
 						t.journey_text = _.join(_.map(t.journey, (o) => {
 							return o.name;
-						}), ' • ')
+						}), ' • ');
+						t.text_monitor = `Le train ${t.name} n°${t.number} prévu à ${moment(t.expectedDepartureTime).format("HH[h]mm")} et à destination de ${t.terminus} ${t.state ? `est ${t.state.toLowerCase()}` : `partira de la gare de ${station_name} ${moment(t.aimedDepartureTime).fromNow()}`}`;
+						t.aimedDepartureTime = moment(t.aimedDepartureTime).format('LT');
 					} else {
-						var txt = `Le train ${t.name} n°${t.number} prévu à ${moment(t.expectedDepartureTime).format("HH[h]mm")} et à destination de ${t.terminus} ${t.state ? `est ${t.state.toLowerCase()}` : `partira de la gare de ${station_name} ${moment(t.expectedDepartureTime).fromNow()}`}`;
+						t.text_monitor = `Le train ${t.name} n°${t.number} prévu à ${moment(t.expectedDepartureTime).format("HH[h]mm")} et à destination de ${t.terminus} ${t.state ? `est ${t.state.toLowerCase()}` : `partira de la gare de ${station_name} ${moment(t.expectedDepartureTime).fromNow()}`}`;
 					}
-					t.text_monitor = txt;
 					t.expectedDepartureTime = moment(t.expectedDepartureTime).format('LT');
 					//remove null item
 					return _.pickBy(t, _.identity);
