@@ -1,7 +1,7 @@
 # monTransilien-API
 API récupérant les prochains départs d'une gare Transilien en Ile-de-France
 
-N'hésitez pas à donnez votre avis et des conseils 😉.
+N'hésitez pas à donner votre avis et des conseils 😉.
 
 Exemple pour la gare de Clichy Levallois:
 
