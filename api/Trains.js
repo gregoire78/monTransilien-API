@@ -184,10 +184,11 @@ function getService(t, sid) {
 			/*if(_.isEmpty(calendars) && !_.isEmpty(services))
 				services_i = services;
 			else*/
-				services_i = [];
+			services_i = [];
 			_.forEach(calendars, (v,k) => {
 				services_i.push(v.service_id);
 			});
+			//if(train.name == "UZAN") console.log(calendars)
 		})
 		.then(() => gtfs.getCalendarDates({
 			agency_key: 'sncf-routes',
@@ -196,17 +197,21 @@ function getService(t, sid) {
 		}))
 		.then(results => {
 			_.forEach(results, (v,k) => {
-				if(v.exception_type === 1){
-					services_i = [ v.service_id ];
-					return false;
-				} else if(v.exception_type === 2){
+				if (v.exception_type === 1) {
+					if (!isNaN(train.number)) {
+						services_i = [v.service_id];
+						return false;
+					} else {
+						services_i = v.service_id;
+					}
+				} else if (v.exception_type === 2) {
 					var index = services_i.indexOf(v.service_id);
 					if (index > -1) {
 						services_i.splice(index, 1);
 					}
 				}
 			});
-			if(train.name == "DUPE") console.log(train.number)
+			if(train.name == "UZAN") console.log(services_i)
 			return services_i;
 		})
 		.then(service => getResultTrain(sid, t, train, service))
