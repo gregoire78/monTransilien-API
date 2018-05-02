@@ -56,13 +56,13 @@ function getResultTrain(sid, t, train, service) {
 			//})
 
 		} else {
-			gtfs.getTrips({
+			gtfs.getTrips(_.pickBy({
 				agency_key: 'sncf-routes',
 				service_id: service.toString(),
-				//trip_headsign: isNaN(train.number) ? train.name : {$regex: ""},
-				trip_id: {$regex: new RegExp(`DUASN${('0' + train.number).slice(-6)}`)}
-			})
-			.then(results => paireVSimpaire(results, train.number, service))
+				trip_headsign: isNaN(train.number) ? train.name : null,
+				trip_id: !isNaN(train.number) ? {$regex: new RegExp(`DUASN${('0' + train.number).slice(-6)}`)} : null
+			}, _.identity))
+			.then(results => paireVSimpaire(results, train, service))
 			.then(trip => {trip_infos = trip[0]}, () => resolve(['error trip id']))
 			.then(() => gtfs.getStoptimes({
 				agency_key: 'sncf-routes',
@@ -70,11 +70,25 @@ function getResultTrain(sid, t, train, service) {
 				stop_id: "StopPoint:DUA"+sid
 			}))
 			.then(stopTimes => {
+				return new Promise((resolve)=>{
+					if(_.isEmpty(stopTimes) && sid == "8727605") { // Hack spécifique aux gares ayant deux numéros UIC identiques
+						gtfs.getStoptimes({
+							agency_key: 'sncf-routes',
+							trip_id: trip_infos.trip_id,
+							stop_id: "StopPoint:DUA8753413"
+						})
+						.then(response => {resolve(response)});
+					} else {
+						resolve(stopTimes);
+					}
+				});
+			})
+			.then(stopTimes => {
 				train.aimedDepartureTime = moment(stopTimes[0].departure_time, "kk:mm:ss"); //kk heure format 01-24 à la plce de HH 00-23
 				if(moment(train.aimedDepartureTime).diff(moment(train.expectedDepartureTime), 'd') > 0){ // verifications horaires chevauchement entre deux jours
 					train.aimedDepartureTime = moment(stopTimes[0].departure_time, "kk:mm:ss").add(1, 'd');
 				}
-			}, () => resolve(['error get stoptime station', trip_infos]))
+			})
 			.then(() => gtfs.getStoptimes({
 				agency_key: 'sncf-routes',
 				trip_id: trip_infos.trip_id
@@ -114,15 +128,15 @@ function getResultTrain(sid, t, train, service) {
 	});
 }
 
-function paireVSimpaire (results, number, service = null){
+function paireVSimpaire (results, train, service = null){
 	return new Promise((resolve) => {
 		if(_.isEmpty(results)){
-			gtfs.getTrips({
+			gtfs.getTrips(_.pickBy({
 				agency_key: 'sncf-routes',
-				service_id: service ? service.toString() :  {$regex: ""},
-				//trip_headsign: isNaN(train.number) ? train.name : {$regex: ""},
-				trip_id: {$regex: new RegExp(`DUASN${('0' + (number % 2 == 1 ? number - 1 : number)).slice(-6)}`)}
-			})
+				service_id: service ? service.toString() : null,
+				trip_headsign: isNaN(train.number) ? train.name : null,
+				trip_id: !isNaN(train.number) ? {$regex: new RegExp(`DUASN${('0' + (train.number % 2 == 1 ? train.number - 1 : train.number)).slice(-6)}`)} : null
+			}, _.identity))
 			.then(response => resolve(response))
 		} else {
 			resolve(results)
@@ -145,12 +159,12 @@ function getService(t, sid) {
 		let services = [];
 		let services_i = [];
 
-		gtfs.getTrips({
+		gtfs.getTrips(_.pickBy({
 			agency_key: 'sncf-routes',
-			//trip_headsign: isNaN(train.number) ? train.name : {$regex: ""},
-			trip_id: {$regex: new RegExp(`DUASN${('0' + train.number).slice(-6)}`)}
-		})
-		.then(results => paireVSimpaire(results, train.number))
+			trip_headsign: isNaN(train.number) ? train.name : null,
+			trip_id: !isNaN(train.number) ? {$regex: new RegExp(`DUASN${('0' + train.number).slice(-6)}`)} : null
+		}, _.identity))
+		.then(results => paireVSimpaire(results, train))
 		.then(results => {
 			services = [];
 			_.forEach(results, (v,k) => {
@@ -167,7 +181,10 @@ function getService(t, sid) {
 		})
 		.then(opt => gtfs.getCalendars(opt))
 		.then(calendars => {
-			services_i = [];
+			/*if(_.isEmpty(calendars) && !_.isEmpty(services))
+				services_i = services;
+			else*/
+				services_i = [];
 			_.forEach(calendars, (v,k) => {
 				services_i.push(v.service_id);
 			});
@@ -189,6 +206,7 @@ function getService(t, sid) {
 					}
 				}
 			});
+			if(train.name == "DUPE") console.log(train.number)
 			return services_i;
 		})
 		.then(service => getResultTrain(sid, t, train, service))
@@ -231,7 +249,7 @@ module.exports = Trains = {
 								}
 								return o;
 							}
-							ok = (o.uic7 == sncfPassages.$.gare.slice(0, -1));
+							ok = (o.uic7 == sncfPassages.$.gare.slice(0, -1) || (sncfPassages.$.gare.slice(0, -1) == "8727605" && o.uic7 == "8753413"));
 						}));
 						t.journey_text = _.join(_.map(t.journey, (o) => {
 							return o.name;

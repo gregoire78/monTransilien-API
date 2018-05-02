@@ -672,7 +672,11 @@
 	{
 		"code": "ERT",
 		"uic7": 8727605,
-		"uic_exeption": 8753413,
+		"nom_gare_sncf": "Ermont Eaubonne"
+	},
+	{
+		"code": "ERE",
+		"uic7": 8753413,
 		"nom_gare_sncf": "Ermont Eaubonne"
 	},
 	{
@@ -813,6 +817,16 @@
 	{
 		"code": "GDS",
 		"uic7": 8727102,
+		"nom_gare_sncf": "Paris Nord"
+	},
+	{
+		"code": "PNB",
+		"uic7": 8727103,
+		"nom_gare_sncf": "Paris Nord"
+	},
+	{
+		"code": "PNO",
+		"uic7": 8727100,
 		"nom_gare_sncf": "Paris Nord"
 	},
 	{
@@ -1088,7 +1102,7 @@
 	{
 		"code": "LIE",
 		"uic7": 8733798,
-		"nom_gare_sncf": "Saint-Ouen lAumône Liesse"
+		"nom_gare_sncf": "Saint-Ouen l'Aumône Liesse"
 	},
 	{
 		"code": "LIM",
@@ -1978,7 +1992,7 @@
 	{
 		"code": "SOA",
 		"uic7": 8727610,
-		"nom_gare_sncf": "Saint-Ouen lAumône"
+		"nom_gare_sncf": "Saint-Ouen l'Aumône"
 	},
 	{
 		"code": "SOS",
@@ -2363,7 +2377,7 @@
 	{
 		"code": "XOA",
 		"uic7": 8738142,
-		"nom_gare_sncf": "Saint-Ouen lAumône Quartier de lÉglise"
+		"nom_gare_sncf": "Saint-Ouen l'Aumône Quartier de lÉglise"
 	},
 	{
 		"code": "XPY",
