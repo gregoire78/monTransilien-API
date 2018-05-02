@@ -213,7 +213,7 @@ function getService(t, sid) {
 
 		gtfs.getTrips(_.pickBy({
 			agency_key: 'sncf-routes',
-			trip_headsign: isNaN(train.number) ? train.name : null,
+			trip_headsign: isNaN(train.number) ? train.name : null, //RER
 			trip_id: !isNaN(train.number) ? {$regex: new RegExp(`DUASN${('0' + train.number).slice(-6)}`)} : null
 		}, _.identity))
 		.then(results => paireVSimpaire(results, train))
@@ -250,7 +250,7 @@ function getService(t, sid) {
 		.then(results => {
 			_.forEach(results, (v,k) => {
 				if (v.exception_type === 1) {
-					if (!isNaN(train.number)) {
+					if (!isNaN(train.number)) { //RER
 						services_i = [v.service_id];
 						return false;
 					} else {
@@ -266,6 +266,9 @@ function getService(t, sid) {
 			return services_i;
 		})
 		.then(service => new Promise(resolve => {
+			/**
+			 * Verification si RER
+			 */
 				if(isNaN(train.number)){
 					gtfs.getStoptimes({
 						agency_key: 'sncf-routes',
