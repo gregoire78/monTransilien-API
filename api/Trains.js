@@ -141,6 +141,7 @@ function getResultTrain(sid, t, train, service) {
 				if(moment(train.aimedDepartureTime).diff(moment(train.expectedDepartureTime), 'd') > 0){ // verifications horaires chevauchement entre deux jours
 					train.aimedDepartureTime = moment(stopTimes[0].departure_time, "kk:mm:ss").add(1, 'd');
 				}
+				console.log(train.number, stopTimes[0].trip_id);
 			})
 			.then(() => gtfs.getStoptimes({
 				agency_key: 'sncf-routes',
@@ -287,10 +288,11 @@ function getService(t, sid) {
 							}
 							console.log(train.number, stoptimes[0].trip_id);
 							resolve(getResultRER(sid, t, train, stoptimes[0].trip_id))
+						} else {
+							resolve(service)
 						}
 					})
 				} else {
-					console.log(train.number, service)
 					resolve(getResultTrain(sid, t, train, service))
 				}
 			})
