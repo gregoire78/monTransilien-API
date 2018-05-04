@@ -33,57 +33,73 @@ function getColorLigne(q) {
 	});
 }
 
-function getResultRER(sid, t, train, tripId) {
+function getResultRER(sid, t, train, stoptimes) {
 	let dessertes = [];
 	let trip_infos;
 	let route_infos;
 	let line_infos;
 
 	return new Promise((resolve, reject) => {
-		const line = _.result(_.find(lignes, function(obj) {
+
+		const line = _.result(_.find(lignes, function (obj) {
 			return obj.uic === parseInt(t.term.toString().slice(0, -1));
 		}), 'line');
 
-		gtfs.getTrips({
-			agency_key: 'sncf-routes',
-			trip_id: tripId
-		})
-		.then(trip => {trip_infos = trip[0]})
-		.then(() => gtfs.getStoptimes({
-			agency_key: 'sncf-routes',
-			trip_id: tripId
-		}))
-		.then(stopTimes => {
-			dessertes = [];
-			_.forEach(stopTimes, (v, k) => {
-				const gareName = _.result(_.find(gares, function(obj) {
-					return obj.uic7 === parseInt(v.stop_id.replace("StopPoint:DUA",""));
-				}), 'nom_gare_sncf');
-				dessertes.push({uic7: parseInt(v.stop_id.replace("StopPoint:DUA","")), name: gareName, dep_time: moment(v.departure_time, "kk:mm:ss").format('LT')});
-			});
-		})
-		.then(() => gtfs.getRoutes({
-			agency_key: 'sncf-routes',
-			route_id: trip_infos.route_id
-		}))
-		.then(routes => route_infos = routes[0], () => resolve(['error route id']))
-		//.then(() => getColorLigne(route_infos.route_short_name))		//Get ligne color via url API https://data.sncf.com/api/records/1.0/search/?dataset=codes-couleur-des-lignes-transilien
-		//.then(toto => line_infos = toto )
-		.then(() => {
-			if(_.isEmpty(dessertes))
-				resolve(['error get desserte'])
-			else {
-				train.journey = dessertes;
-				train.route = {
-					id: route_infos.route_id,
-					line: route_infos.route_short_name,
-					long_name: route_infos.route_long_name,
-					color: "#"+route_infos.route_color
-				};
-				//train.line = line_infos;
-				resolve(train);
+		if (_.isEmpty(stoptimes)) {
+
+			train.journey = 'no service for : ' + train.number;
+			train.route = { line: line };
+			resolve(train);
+
+		} else {
+
+			train.aimedDepartureTime = moment(stoptimes[0].departure_time, "kk:mm:ss"); //kk heure format 01-24 à la plce de HH 00-23
+			if (moment(train.aimedDepartureTime).diff(moment(train.expectedDepartureTime), 'd') > 0) { // verifications horaires chevauchement entre deux jours
+				train.aimedDepartureTime = moment(stoptimes[0].departure_time, "kk:mm:ss").add(1, 'd');
 			}
-		})
+			console.log(train.number, stoptimes[0].trip_id);
+
+			gtfs.getTrips({
+				agency_key: 'sncf-routes',
+				trip_id: stoptimes[0].trip_id
+			})
+				.then(trip => { trip_infos = trip[0] })
+				.then(() => gtfs.getStoptimes({
+					agency_key: 'sncf-routes',
+					trip_id: stoptimes[0].trip_id
+				}))
+				.then(stopTimes => {
+					dessertes = [];
+					_.forEach(stopTimes, (v, k) => {
+						const gareName = _.result(_.find(gares, function (obj) {
+							return obj.uic7 === parseInt(v.stop_id.replace("StopPoint:DUA", ""));
+						}), 'nom_gare_sncf');
+						dessertes.push({ uic7: parseInt(v.stop_id.replace("StopPoint:DUA", "")), name: gareName, dep_time: moment(v.departure_time, "kk:mm:ss").format('LT') });
+					});
+				})
+				.then(() => gtfs.getRoutes({
+					agency_key: 'sncf-routes',
+					route_id: trip_infos.route_id
+				}))
+				.then(routes => route_infos = routes[0], () => resolve(['error route id']))
+				//.then(() => getColorLigne(route_infos.route_short_name))		//Get ligne color via url API https://data.sncf.com/api/records/1.0/search/?dataset=codes-couleur-des-lignes-transilien
+				//.then(toto => line_infos = toto )
+				.then(() => {
+					if (_.isEmpty(dessertes))
+						resolve(['error get desserte'])
+					else {
+						train.journey = dessertes;
+						train.route = {
+							id: route_infos.route_id,
+							line: route_infos.route_short_name,
+							long_name: route_infos.route_long_name,
+							color: "#" + route_infos.route_color
+						};
+						//train.line = line_infos;
+						resolve(train);
+					}
+				})
+		}
 	});
 }
 
@@ -281,16 +297,7 @@ function getService(t, sid) {
 						}
 					})
 					.then(stoptimes => {
-						if(!_.isEmpty(stoptimes)){
-							train.aimedDepartureTime = moment(stoptimes[0].departure_time, "kk:mm:ss"); //kk heure format 01-24 à la plce de HH 00-23
-							if(moment(train.aimedDepartureTime).diff(moment(train.expectedDepartureTime), 'd') > 0){ // verifications horaires chevauchement entre deux jours
-								train.aimedDepartureTime = moment(stoptimes[0].departure_time, "kk:mm:ss").add(1, 'd');
-							}
-							console.log(train.number, stoptimes[0].trip_id);
-							resolve(getResultRER(sid, t, train, stoptimes[0].trip_id))
-						} else {
-							resolve(service)
-						}
+						resolve(getResultRER(sid, t, train, stoptimes))
 					})
 				} else {
 					resolve(getResultTrain(sid, t, train, service))
