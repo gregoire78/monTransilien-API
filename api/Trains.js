@@ -63,42 +63,42 @@ function getResultRER(sid, t, train, stoptimes) {
 				agency_key: 'sncf-routes',
 				trip_id: stoptimes[0].trip_id
 			})
-				.then(trip => { trip_infos = trip[0] })
-				.then(() => gtfs.getStoptimes({
-					agency_key: 'sncf-routes',
-					trip_id: stoptimes[0].trip_id
-				}))
-				.then(stopTimes => {
-					dessertes = [];
-					_.forEach(stopTimes, (v, k) => {
-						const gareName = _.result(_.find(gares, function (obj) {
-							return obj.uic7 === parseInt(v.stop_id.replace("StopPoint:DUA", ""));
-						}), 'nom_gare_sncf');
-						dessertes.push({ uic7: parseInt(v.stop_id.replace("StopPoint:DUA", "")), name: gareName, dep_time: moment(v.departure_time, "kk:mm:ss").format('LT') });
-					});
-				})
-				.then(() => gtfs.getRoutes({
-					agency_key: 'sncf-routes',
-					route_id: trip_infos.route_id
-				}))
-				.then(routes => route_infos = routes[0], () => resolve(['error route id']))
-				//.then(() => getColorLigne(route_infos.route_short_name))		//Get ligne color via url API https://data.sncf.com/api/records/1.0/search/?dataset=codes-couleur-des-lignes-transilien
-				//.then(toto => line_infos = toto )
-				.then(() => {
-					if (_.isEmpty(dessertes))
-						resolve(['error get desserte'])
-					else {
-						train.journey = dessertes;
-						train.route = {
-							id: route_infos.route_id,
-							line: route_infos.route_short_name,
-							long_name: route_infos.route_long_name,
-							color: "#" + route_infos.route_color
-						};
-						//train.line = line_infos;
-						resolve(train);
-					}
-				})
+			.then(trip => { trip_infos = trip[0] })
+			.then(() => gtfs.getStoptimes({
+				agency_key: 'sncf-routes',
+				trip_id: stoptimes[0].trip_id
+			}))
+			.then(stopTimes => {
+				dessertes = [];
+				_.forEach(stopTimes, (v, k) => {
+					const gareName = _.result(_.find(gares, function (obj) {
+						return obj.uic7 === parseInt(v.stop_id.replace("StopPoint:DUA", ""));
+					}), 'nom_gare_sncf');
+					dessertes.push({ uic7: parseInt(v.stop_id.replace("StopPoint:DUA", "")), name: gareName, dep_time: moment(v.departure_time, "kk:mm:ss").format('LT') });
+				});
+			})
+			.then(() => gtfs.getRoutes({
+				agency_key: 'sncf-routes',
+				route_id: trip_infos.route_id
+			}))
+			.then(routes => route_infos = routes[0], () => resolve(['error route id']))
+			//.then(() => getColorLigne(route_infos.route_short_name))		//Get ligne color via url API https://data.sncf.com/api/records/1.0/search/?dataset=codes-couleur-des-lignes-transilien
+			//.then(toto => line_infos = toto )
+			.then(() => {
+				if (_.isEmpty(dessertes))
+					resolve(['error get desserte'])
+				else {
+					train.journey = dessertes;
+					train.route = {
+						id: route_infos.route_id,
+						line: route_infos.route_short_name,
+						long_name: route_infos.route_long_name,
+						color: "#" + route_infos.route_color
+					};
+					//train.line = line_infos;
+					resolve(train);
+				}
+			})
 		}
 	});
 }
@@ -162,7 +162,7 @@ function getResultTrain(sid, t, train, service) {
 			.then(() => gtfs.getStoptimes({
 				agency_key: 'sncf-routes',
 				trip_id: trip_infos.trip_id
-			}))
+			}), () => resolve([]))
 			.then(stopTimes => {
 				dessertes = [];
 				_.forEach(stopTimes, (v, k) => {
@@ -265,22 +265,45 @@ function getService(t, sid) {
 			date: parseInt(moment(train.expectedDepartureTime).format('YYYYMMDD'))
 		}))
 		.then(results => {
-			_.forEach(results, (v,k) => {
-				if (v.exception_type === 1) {
-					if (!isNaN(train.number)) { //RER
-						services_i = [v.service_id];
-						return false;
-					} else {
-						services_i = _.uniqWith(services_i.concat(v.service_id), _.isEqual);
+			return new Promise((resolve, reject) => {
+				_.forEach(results, (v, k) => {
+					if (v.exception_type === 1) {
+						if (!isNaN(train.number)) { //RER
+							services_i = [v.service_id];
+							return false;
+						} else {
+							services_i = _.uniqWith(services_i.concat(v.service_id), _.isEqual);
+						}
+					} else if (v.exception_type === 2) {
+						var index = services_i.indexOf(v.service_id);
+						if (index > -1) {
+							services_i.splice(index, 1);
+						}
 					}
-				} else if (v.exception_type === 2) {
-					var index = services_i.indexOf(v.service_id);
-					if (index > -1) {
-						services_i.splice(index, 1);
-					}
+				});
+				// Si pas de services trouvés mais que le train est prévu en temps réél et dans le gtfs (exclu RER A et B)
+				if (_.isEmpty(results) && _.isEmpty(services_i) && !isNaN(train.number)) {
+					gtfs.getStoptimes({
+							agency_key: 'sncf-routes',
+							stop_id: "StopPoint:DUA" + sid,
+							departure_time: {
+								$lte: moment(train.expectedDepartureTime).format("kk:mm:ss"),
+							},
+							trip_id: {
+								$regex: new RegExp(`DUASN${('0' + train.number).slice(-6)}`)
+							}
+						})
+						.then(result => gtfs.getTrips({
+							agency_key: 'sncf-routes',
+							trip_id: result[0].trip_id
+						}))
+						.then(result => {
+							resolve([result[0].service_id])
+						})
+				} else {
+					resolve(services_i);
 				}
-			});		
-			return services_i;
+			});
 		})
 		.then(service => new Promise(resolve => {
 			/**
@@ -292,8 +315,8 @@ function getService(t, sid) {
 						stop_id: "StopPoint:DUA"+sid,
 						service_id: {$in: service},
 						departure_time: {
-							$lte: moment(train.expectedDepartureTime).format("HH:mm:ss"),
-							$gte: moment(train.expectedDepartureTime).subtract(5, 'm').format("HH:mm:ss")
+							$lte: moment(train.expectedDepartureTime).format("kk:mm:ss"),
+							$gte: moment(train.expectedDepartureTime).subtract(5, 'm').format("kk:mm:ss")
 						}
 					})
 					.then(stoptimes => {
@@ -331,39 +354,44 @@ module.exports = Trains = {
 			}), 'nom_gare_sncf');
 			const sncf = {
 				station: station_name,
-				trains: services.map((t, k) => {
-					if(_.isArray(t.journey)){ // si il y a un service
-						const late = moment(t.expectedDepartureTime).diff(moment(t.aimedDepartureTime), "m");
-						let ok = false;
-						t.late = (late !== 0 ? `${(late<0?"":"+") + late} min` : "à l'heure" );
-						t.journey = _.compact(_.map(t.journey, (o) => {		// recevoir seulement la suite
-							if (ok) {
-								if (o.name == t.terminus) {
-									ok = false;
+				trains: _.compact(services.map((t, k) => {
+					if (!_.isEmpty(t)) {
+						if (_.isArray(t.journey)) { // si il y a un service
+							const late = moment(t.expectedDepartureTime).diff(moment(t.aimedDepartureTime), "m");
+							let ok = false;
+							t.late = (late !== 0 ? `${(late<0?"":"+") + late} min` : "à l'heure");
+							t.journey = _.compact(_.map(t.journey, (o) => { // recevoir seulement la suite
+								if (ok) {
+									if (o.name == t.terminus) {
+										ok = false;
+									}
+									return o;
 								}
-								return o;
-							}
-							ok = (o.uic7 == sncfPassages.$.gare.slice(0, -1) || (sncfPassages.$.gare.slice(0, -1) == "8727605" && o.uic7 == "8753413"));
-						}));
-						t.journey_text = _.join(_.map(t.journey, (o) => {
-							return o.name;
-						}), ' • ');//·
-						t.text_monitor = `Le train ${t.name} n°${t.number} prévu à ${moment(t.expectedDepartureTime).format("HH[h]mm")} et à destination de ${t.terminus} ${t.state ? `est ${t.state.toLowerCase()}` : `partira de la gare de ${station_name} ${moment(t.aimedDepartureTime).fromNow()}`}`;
-						t.aimedDepartureTime = moment(t.aimedDepartureTime).format('LT');
+								ok = (o.uic7 == sncfPassages.$.gare.slice(0, -1) || (sncfPassages.$.gare.slice(0, -1) == "8727605" && o.uic7 == "8753413"));
+							}));
+							t.journey_text = _.join(_.map(t.journey, (o) => {
+								return o.name;
+							}), ' • '); //·
+							t.text_monitor = `Le train ${t.name} n°${t.number} prévu à ${moment(t.expectedDepartureTime).format("HH[h]mm")} et à destination de ${t.terminus} ${t.state ? `est ${t.state.toLowerCase()}` : `partira de la gare de ${station_name} ${moment(t.aimedDepartureTime).fromNow()}`}`;
+							t.aimedDepartureTime = moment(t.aimedDepartureTime).format('LT');
+						} else {
+							t.text_monitor = `Le train ${t.name} n°${t.number} prévu à ${moment(t.expectedDepartureTime).format("HH[h]mm")} et à destination de ${t.terminus} ${t.state ? `est ${t.state.toLowerCase()}` : `partira de la gare de ${station_name} ${moment(t.expectedDepartureTime).fromNow()}`}`;
+						}
+						t.expectedDepartureTime = moment(t.expectedDepartureTime).format('LT');
+						//remove null item
+						return _.pickBy(t, _.identity);
 					} else {
-						t.text_monitor = `Le train ${t.name} n°${t.number} prévu à ${moment(t.expectedDepartureTime).format("HH[h]mm")} et à destination de ${t.terminus} ${t.state ? `est ${t.state.toLowerCase()}` : `partira de la gare de ${station_name} ${moment(t.expectedDepartureTime).fromNow()}`}`;
+						return null
 					}
-					t.expectedDepartureTime = moment(t.expectedDepartureTime).format('LT');
-					//remove null item
-					return _.pickBy(t, _.identity);
-				})
+				}))
 			};
-			
 			return sncf;
 		})
 		.then(sncf => res.json(sncf))
 		.catch(err => {
-			res.end()
+			res.status(404).end("Il n'y a prochains départs en temps réél pour la gare de " + _.result(_.find(gares, function (obj) {
+				return obj.uic7 === parseInt(sncfPassages.$.gare.slice(0, -1));
+			}), 'nom_gare_sncf') + " ("+sncfPassages.$.gare+")")
 		})
 	}
 };

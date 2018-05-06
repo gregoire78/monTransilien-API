@@ -167,7 +167,7 @@
 	{
 		"code": "BLA",
 		"uic7": 8738115,
-		"nom_gare_sncf": "Boissy-lAillerie"
+		"nom_gare_sncf": "Boissy-l'Aillerie"
 	},
 	{
 		"code": "BLU",
@@ -1720,6 +1720,11 @@
 		"nom_gare_sncf": "Paris Montparnasse"
 	},
 	{
+		"code": "VAU",
+		"uic7": 8739110,
+		"nom_gare_sncf": "Paris Vaugirard"
+	},
+	{
 		"code": "POA",
 		"uic7": 8739316,
 		"nom_gare_sncf": "Porchefontaine"
@@ -1762,7 +1767,7 @@
 	{
 		"code": "PRU",
 		"uic7": 8754619,
-		"nom_gare_sncf": "Pont de Rungis Aéroport dOrly"
+		"nom_gare_sncf": "Pont de Rungis Aéroport d'Orly"
 	},
 	{
 		"code": "PRY",
