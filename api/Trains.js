@@ -282,7 +282,7 @@ function getService(t, sid) {
 					}
 				});
 				// Si pas de services trouvés mais que le train est prévu en temps réél et dans le gtfs (exclu RER A et B)
-				if (_.isEmpty(results) && _.isEmpty(services_i) && !isNaN(train.number)) {
+				if (_.isEmpty(results) && _.isEmpty(services_i) && !isNaN(train.number) && (train.number < 830000)) { // Transilien entre 110000 et 169999 http://www.espacerails.com/reel/article-25-la-numerotation-des-trains.html
 					gtfs.getStoptimes({
 							agency_key: 'sncf-routes',
 							stop_id: "StopPoint:DUA" + sid,
@@ -299,7 +299,7 @@ function getService(t, sid) {
 							trip_id: _.isEmpty(result) ? null : result[0].trip_id
 						}))
 						.then(result => {
-							resolve([_.isEmpty(result) ? "" : result[0].service_id])
+							resolve([_.isEmpty(result) ? services_i : result[0].service_id])
 						})
 				} else {
 					resolve(services_i);
@@ -390,7 +390,7 @@ module.exports = Trains = {
 		})
 		.then(sncf => res.json(sncf))
 		.catch(err => {
-			res.status(404).end("Il n'y a prochains départs en temps réél pour la gare de " + _.result(_.find(gares, function (obj) {
+			res.status(404).end("Il n'y a aucun prochains départs en temps réél pour la gare de " + _.result(_.find(gares, function (obj) {
 				return obj.uic7 === parseInt(sncfPassages.$.gare.slice(0, -1));
 			}), 'nom_gare_sncf') + " ("+sncfPassages.$.gare+")")
 		})
