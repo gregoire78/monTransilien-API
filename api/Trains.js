@@ -288,6 +288,7 @@ function getService(t, sid) {
 							stop_id: "StopPoint:DUA" + sid,
 							departure_time: {
 								$lte: moment(train.expectedDepartureTime).format("kk:mm:ss"),
+								$gte: moment(train.expectedDepartureTime).subtract(2, 'm').format("kk:mm:ss")								
 							},
 							trip_id: {
 								$regex: new RegExp(`DUASN${('0' + train.number).slice(-6)}`)
@@ -295,10 +296,10 @@ function getService(t, sid) {
 						})
 						.then(result => gtfs.getTrips({
 							agency_key: 'sncf-routes',
-							trip_id: result[0].trip_id
+							trip_id: _.isEmpty(result) ? null : result[0].trip_id
 						}))
 						.then(result => {
-							resolve([result[0].service_id])
+							resolve([_.isEmpty(result) ? "" : result[0].service_id])
 						})
 				} else {
 					resolve(services_i);
@@ -370,12 +371,12 @@ module.exports = Trains = {
 								ok = (o.uic7 == sncfPassages.$.gare.slice(0, -1) || (sncfPassages.$.gare.slice(0, -1) == "8727605" && o.uic7 == "8753413"));
 							}));
 							t.journey_text = _.join(_.map(t.journey, (o) => {
-								return o.name;
+								return o.name /*+ " ("+moment(o.dep_time, 'kk:mm').format('HH[h]mm')+")"*/;
 							}), ' • '); //·
-							t.text_monitor = `Le train ${t.name} n°${t.number} prévu à ${moment(t.expectedDepartureTime).format("HH[h]mm")} et à destination de ${t.terminus} ${t.state ? `est ${t.state.toLowerCase()}` : `partira de la gare de ${station_name} ${moment(t.aimedDepartureTime).fromNow()}`}`;
+							//t.text_monitor = `Le train ${t.name} n°${t.number} prévu à ${moment(t.expectedDepartureTime).format("HH[h]mm")} et à destination de ${t.terminus} ${t.state ? `est ${t.state.toLowerCase()}` : `partira de la gare de ${station_name} ${moment(t.aimedDepartureTime).fromNow()}`}`;
 							t.aimedDepartureTime = moment(t.aimedDepartureTime).format('LT');
 						} else {
-							t.text_monitor = `Le train ${t.name} n°${t.number} prévu à ${moment(t.expectedDepartureTime).format("HH[h]mm")} et à destination de ${t.terminus} ${t.state ? `est ${t.state.toLowerCase()}` : `partira de la gare de ${station_name} ${moment(t.expectedDepartureTime).fromNow()}`}`;
+							//t.text_monitor = `Le train ${t.name} n°${t.number} prévu à ${moment(t.expectedDepartureTime).format("HH[h]mm")} et à destination de ${t.terminus} ${t.state ? `est ${t.state.toLowerCase()}` : `partira de la gare de ${station_name} ${moment(t.expectedDepartureTime).fromNow()}`}`;
 						}
 						t.expectedDepartureTime = moment(t.expectedDepartureTime).format('LT');
 						//remove null item
