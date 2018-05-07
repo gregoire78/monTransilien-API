@@ -317,8 +317,10 @@ function getService(t, sid) {
 						service_id: {$in: service},
 						departure_time: {
 							$lte: moment(train.expectedDepartureTime).format("kk:mm:ss"),
-							$gte: moment(train.expectedDepartureTime).subtract(5, 'm').format("kk:mm:ss")
+							//$gte: moment(train.expectedDepartureTime).subtract(8, 'm').format("kk:mm:ss")
 						}
+					},{},{
+						sort: {departure_time: -1}  
 					})
 					.then(stoptimes => {
 						resolve(getResultRER(sid, t, train, stoptimes))
