@@ -354,7 +354,7 @@ module.exports = Trains = {
 
 		// test multiple promise result
 		getPassageAPI
-		.then(() => Promise.all(sncfPassages.train.slice(0,20).map(train => getService(train, parseInt(sncfPassages.$.gare.slice(0, -1))))))
+		.then(() => Promise.all(sncfPassages.train.slice(0,6).map(train => getService(train, parseInt(sncfPassages.$.gare.slice(0, -1))))))
 		.then(services => {
 			const station_name = _.result(_.find(gares, function (obj) {
 				return obj.uic7 === parseInt(sncfPassages.$.gare.slice(0, -1));
