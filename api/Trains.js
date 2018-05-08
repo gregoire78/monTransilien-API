@@ -56,7 +56,7 @@ function getResultRER(sid, t, train, stoptimes) {
 			if (moment(train.aimedDepartureTime).diff(moment(train.expectedDepartureTime), 'd') > 0 || moment(train.expectedDepartureTime) > moment().endOf('day')) { // verifications horaires chevauchement entre deux jours
 				train.aimedDepartureTime = moment(stoptimes[0].departure_time, "kk:mm:ss").add(1, 'd');
 			}
-			console.log(train.number, stoptimes[0].trip_id);
+			//console.log(train.number, stoptimes[0].trip_id);
 
 			gtfs.getTrips({
 				agency_key: 'sncf-routes',
@@ -91,7 +91,7 @@ function getResultRER(sid, t, train, stoptimes) {
 					train.route = {
 						id: route_infos.route_id,
 						line: route_infos.route_short_name,
-						type: "rer",
+						type: _.indexOf(['N'],route_infos.route_short_name) > -1 ? "transilien" : "rer",
 						long_name: route_infos.route_long_name,
 						color: "#" + route_infos.route_color
 					};
@@ -160,7 +160,7 @@ function getResultTrain(sid, t, train, service) {
 				if(moment(train.aimedDepartureTime).diff(moment(train.expectedDepartureTime), 'd') > 0 || moment(train.expectedDepartureTime) > moment().endOf('day')){ // verifications horaires chevauchement entre deux jours
 					train.aimedDepartureTime = moment(stopTimes[0].departure_time, "kk:mm:ss").add(1, 'd');
 				}
-				console.log(train.number, stopTimes[0].trip_id);
+				//console.log(train.number, stopTimes[0].trip_id);
 			})
 			.then(() => gtfs.getStoptimes({
 				agency_key: 'sncf-routes',
@@ -190,7 +190,7 @@ function getResultTrain(sid, t, train, service) {
 					train.route = {
 						id: route_infos.route_id,
 						line: route_infos.route_short_name,
-						type: (_.indexOf(['C', 'D', 'E'],route_infos.route_short_name) > -1) ? "rer" : ((train.number >= 110000 && train.number <= 169999) ? "transilien" : ((train.number >= 830000) ? "ter" : "")),
+						type: (_.indexOf(['C', 'D', 'E'],route_infos.route_short_name) > -1) ? "rer" : ((train.number >= 110000 && train.number <= 169999 || _.indexOf(['N'],route_infos.route_short_name) > -1) ? "transilien" : ((train.number >= 830000) ? "ter" : "")),
 						long_name: route_infos.route_long_name,
 						color: "#"+route_infos.route_color
 					};
@@ -285,18 +285,20 @@ function getService(t, sid) {
 						}
 					}
 				});
-				// Si pas de services trouvés mais que le train est prévu en temps réél et est dans le gtfs (exclu RER A et B et TER)
-				if (_.isEmpty(results) && _.isEmpty(services_i) && !isNaN(train.number) && (train.number < 830000)) { // Transilien entre 110000 et 169999 http://www.espacerails.com/reel/article-25-la-numerotation-des-trains.html
+				// Si pas de services trouvés mais que le train est prévu en temps réél et est dans le gtfs (exclu RER A et B et C et TER)
+				if (_.isEmpty(results) && _.isEmpty(services_i) && !isNaN(train.number) && !(train.number >= 140000 && train.number <= 149999) && (train.number < 830000)) { // Transilien entre 110000 et 169999 http://www.espacerails.com/reel/article-25-la-numerotation-des-trains.html
 					gtfs.getStoptimes({
 							agency_key: 'sncf-routes',
 							stop_id: "StopPoint:DUA" + sid,
 							departure_time: {
-								$lte: moment(train.expectedDepartureTime).format("kk:mm:ss"),
-								$gte: moment(train.expectedDepartureTime).subtract(2, 'm').format("kk:mm:ss")								
+								$lte: moment(train.expectedDepartureTime).format("HH:mm:ss"),
+								//$gte: moment(train.expectedDepartureTime).subtract(10, 'm').format("HH:mm:ss")
 							},
 							trip_id: {
 								$regex: new RegExp(`DUASN${('0' + train.number).slice(-6)}`)
 							}
+						},{},{
+							sort: {departure_time: -1}  
 						})
 						.then(result => gtfs.getTrips({
 							agency_key: 'sncf-routes',
@@ -396,9 +398,14 @@ module.exports = Trains = {
 		})
 		.then(sncf => res.json(sncf))
 		.catch(err => {
-			res.status(404).end("Il n'y a aucun prochains départs en temps réél pour la gare de " + _.result(_.find(gares, function (obj) {
+			/*res.status(404).end("Il n'y a aucun prochains départs en temps réél pour la gare de " + _.result(_.find(gares, function (obj) {
 				return obj.uic7 === parseInt(sncfPassages.$.gare.slice(0, -1));
-			}), 'nom_gare_sncf') + " ("+sncfPassages.$.gare+")")
+			}), 'nom_gare_sncf') + " ("+sncfPassages.$.gare+")")*/
+			res.status(404).json({
+				station:  _.result(_.find(gares, function (obj) {
+				return obj.uic7 === parseInt(sncfPassages.$.gare.slice(0, -1));
+				}), 'nom_gare_sncf')
+			})
 		})
 	}
 };
