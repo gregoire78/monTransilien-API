@@ -120,7 +120,10 @@ function getResultTrain(sid, t, train, service) {
 			//getColorLigne(line)
 			//.then(toto => {
 				train.journey = 'no service for : '+ train.number;
-				train.route = {line: line};
+				train.route = {
+					line: line, 
+					type: (_.indexOf(['C', 'D', 'E'],line) > -1) ? "rer" : ((train.number >= 110000 && train.number <= 169999) ? "transilien" : ((train.number >= 830000) ? "ter" : ""))
+				};
 				//train.line = toto;
 				resolve(train);
 			//})
@@ -351,7 +354,7 @@ module.exports = Trains = {
 
 		// test multiple promise result
 		getPassageAPI
-		.then(() => Promise.all(sncfPassages.train.slice(0,6).map(train => getService(train, parseInt(sncfPassages.$.gare.slice(0, -1))))))
+		.then(() => Promise.all(sncfPassages.train.slice(0,20).map(train => getService(train, parseInt(sncfPassages.$.gare.slice(0, -1))))))
 		.then(services => {
 			const station_name = _.result(_.find(gares, function (obj) {
 				return obj.uic7 === parseInt(sncfPassages.$.gare.slice(0, -1));
