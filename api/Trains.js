@@ -234,7 +234,7 @@ function getService(t, sid) {
 
 		gtfs.getTrips(_.pickBy({
 			agency_key: 'sncf-routes',
-			trip_headsign: isNaN(train.number) ? train.name : null, //RER
+			trip_headsign: (isNaN(train.number) || (train.number >= 140000 && train.number <= 149999)) ? train.name : null, //RER
 			trip_id: !isNaN(train.number) ? {$regex: new RegExp(`DUASN${('0' + train.number).slice(-6)}`)} : null
 		}, _.identity))
 		.then(results => paireVSimpaire(results, train))
@@ -272,7 +272,7 @@ function getService(t, sid) {
 			return new Promise((resolve, reject) => {
 				_.forEach(results, (v, k) => {
 					if (v.exception_type === 1) {
-						if (!isNaN(train.number)) { //RER
+						if (train.number <= 169999) { //pas RER
 							services_i = [v.service_id];
 							return false;
 						} else {
@@ -285,49 +285,79 @@ function getService(t, sid) {
 						}
 					}
 				});
-				// Si pas de services trouvés mais que le train est prévu en temps réél et est dans le gtfs (exclu RER A et B et C et TER)
-				if (_.isEmpty(results) && _.isEmpty(services_i) && !isNaN(train.number) && !(train.number >= 140000 && train.number <= 149999) && (train.number < 830000)) { // Transilien entre 110000 et 169999 http://www.espacerails.com/reel/article-25-la-numerotation-des-trains.html
-					gtfs.getStoptimes({
-							agency_key: 'sncf-routes',
-							stop_id: "StopPoint:DUA" + sid,
-							departure_time: {
-								$lte: moment(train.expectedDepartureTime).format("HH:mm:ss"),
-								//$gte: moment(train.expectedDepartureTime).subtract(10, 'm').format("HH:mm:ss")
-							},
-							trip_id: {
-								$regex: new RegExp(`DUASN${('0' + train.number).slice(-6)}`)
-							}
-						},{},{
-							sort: {departure_time: -1}  
-						})
-						.then(result => gtfs.getTrips({
-							agency_key: 'sncf-routes',
-							trip_id: _.isEmpty(result) ? null : result[0].trip_id
-						}))
-						.then(result => {
-							resolve([_.isEmpty(result) ? services_i : result[0].service_id])
-						})
+				// Si pas de services trouvés mais que le train est prévu en temps réél et est dans le gtfs (exclu RER A et B et TER)
+				if (_.isEmpty(results) && _.isEmpty(services_i) && !isNaN(train.number) && (train.number < 830000)) { //  && !(train.number >= 140000 && train.number <= 149999) // Transilien entre 110000 et 169999 http://www.espacerails.com/reel/article-25-la-numerotation-des-trains.html
+					gtfs.getRoutes({
+						agency_key: 'sncf-routes',
+						route_long_name: {$regex: " - " + train.terminus, $options: '-i'},
+						route_type: 2
+					})
+					.then(routes=>{
+						let routees = [];
+						_.forEach(routes, (v,k) => {
+							routees.push(v.route_id);
+						});
+						return routees;
+					})
+					.then(routes => gtfs.getStoptimes({
+						agency_key: 'sncf-routes',
+						stop_id: "StopPoint:DUA" + sid,
+						departure_time: {
+							$lte: moment(train.expectedDepartureTime).format("HH:mm:ss"),
+							//$gte: moment(train.expectedDepartureTime).subtract(10, 'm').format("HH:mm:ss")
+						},
+						trip_id: {
+							$regex: new RegExp(`DUASN${('0' + train.number).slice(-6)}`)
+						},
+						route_id: {$in: routes}
+					},{},{
+						sort: {departure_time: -1}  
+					}))
+					.then(result => gtfs.getTrips({
+						agency_key: 'sncf-routes',
+						trip_id: _.isEmpty(result) ? null : result[0].trip_id
+					}))
+					.then(result => {
+						resolve(_.isEmpty(result) ? services_i : [result[0].service_id])
+					})
 				} else {
 					resolve(services_i);
 				}
 			});
 		})
 		.then(service => new Promise(resolve => {
+			//console.log(train.name, service, train.number)
 			/**
-			 * Verification si RER
+			 * Verification si RER A ou B
 			 */
-				if(isNaN(train.number)){
-					gtfs.getStoptimes({
+				if(!(train.number <= 169999)){
+					/**
+					 * get route pour verifier la destination
+					 */
+					gtfs.getRoutes({
+						agency_key: 'sncf-routes',
+						route_long_name: {$regex: " - " + train.terminus, $options: '-i'},
+						route_type: 2
+					})
+					.then(routes=>{
+						let routees = [];
+						_.forEach(routes, (v,k) => {
+							routees.push(v.route_id);
+						});
+						return routees;
+					})
+					.then(routes => gtfs.getStoptimes({
 						agency_key: 'sncf-routes',
 						stop_id: "StopPoint:DUA"+sid,
 						service_id: {$in: service},
 						departure_time: {
 							$lte: moment(train.expectedDepartureTime).format("HH:mm:ss"),
 							//$gte: moment(train.expectedDepartureTime).subtract(8, 'm').format("kk:mm:ss")
-						}
+						},
+						route_id: {$in: routes}
 					},{},{
 						sort: {departure_time: -1}  
-					})
+					}))
 					.then(stoptimes => {
 						resolve(getResultRER(sid, t, train, stoptimes))
 					})
@@ -378,6 +408,7 @@ module.exports = Trains = {
 								}
 								ok = (o.uic7 == sncfPassages.$.gare.slice(0, -1) || (sncfPassages.$.gare.slice(0, -1) == "8727605" && o.uic7 == "8753413"));
 							}));
+							// desserte en string
 							t.journey_text = _.join(_.map(t.journey, (o) => {
 								return o.name /*+ " ("+moment(o.dep_time, 'kk:mm').format('HH[h]mm')+")"*/;
 							}), ' • '); //·
