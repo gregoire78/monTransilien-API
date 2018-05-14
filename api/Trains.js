@@ -150,16 +150,24 @@ function getResultTrain(sid, t, train, service) {
 							stop_id: "StopPoint:DUA8753413"
 						})
 						.then(response => {resolve(response)});
+					} else if(_.isEmpty(stopTimes)) { // si arrêt pas prévus
+						gtfs.getStoptimes({
+							agency_key: 'sncf-routes',
+							trip_id: trip_infos.trip_id
+						})
+						.then(response => {resolve({unexpected: 1, resolve})});
 					} else {
 						resolve(stopTimes);
 					}
 				});
 			})
 			.then(stopTimes => {
-				train.aimedDepartureTime = moment(stopTimes[0].departure_time, "kk:mm:ss"); //kk heure format 01-24 à la plce de HH 00-23
-				if(moment(train.aimedDepartureTime).diff(moment(train.expectedDepartureTime), 'd') > 0 || moment(train.expectedDepartureTime) > moment().endOf('day')){ // verifications horaires chevauchement entre deux jours
-					train.aimedDepartureTime = moment(stopTimes[0].departure_time, "kk:mm:ss").add(1, 'd');
-				}
+				if(!stopTimes.unexpected) {
+					train.aimedDepartureTime = moment(stopTimes[0].departure_time, "kk:mm:ss"); //kk heure format 01-24 à la plce de HH 00-23
+					if(moment(train.aimedDepartureTime).diff(moment(train.expectedDepartureTime), 'd') > 0 || moment(train.expectedDepartureTime) > moment().endOf('day')){ // verifications horaires chevauchement entre deux jours
+						train.aimedDepartureTime = moment(stopTimes[0].departure_time, "kk:mm:ss").add(1, 'd');
+					}
+				} else train.aimedDepartureTime = train.expectedDepartureTime
 				//console.log(train.number, stopTimes[0].trip_id);
 			})
 			.then(() => gtfs.getStoptimes({
@@ -330,7 +338,7 @@ function getService(t, sid) {
 			/**
 			 * Verification si RER A ou B
 			 */
-				if(!(train.number <= 169999)){
+				if(!(train.number <= 169999) && isNaN(train.number)){
 					/**
 					 * get route pour verifier la destination
 					 */
