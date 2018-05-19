@@ -419,7 +419,10 @@ module.exports = Trains = {
 							// desserte en string
 							t.journey_text = _.join(_.map(t.journey, (o) => {
 								return o.name /*+ " ("+moment(o.dep_time, 'kk:mm').format('HH[h]mm')+")"*/;
-							}), ' <span class="dot-separator">•</span> '); //·
+							}), ' • '); //·
+							t.journey_text_html = _.join(_.map(t.journey, (o) => {
+								return o.name;
+							}), ' <span class="dot-separator">•</span> ');
 							//t.text_monitor = `Le train ${t.name} n°${t.number} prévu à ${moment(t.expectedDepartureTime).format("HH[h]mm")} et à destination de ${t.terminus} ${t.state ? `est ${t.state.toLowerCase()}` : `partira de la gare de ${station_name} ${moment(t.aimedDepartureTime).fromNow()}`}`;
 							t.aimedDepartureTime = moment(t.aimedDepartureTime).format('LT');
 						} else {
