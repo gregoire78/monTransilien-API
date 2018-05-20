@@ -122,7 +122,7 @@ function getResultTrain(sid, t, train, service) {
 				train.journey = 'no service for : '+ train.number;
 				train.route = {
 					line: line, 
-					type: (_.indexOf(['C', 'D', 'E'],line) > -1) ? "rer" : ((train.number >= 110000 && train.number <= 169999) ? "transilien" : ((train.number >= 830000) ? "ter" : ""))
+					type: (_.indexOf(['A', 'B', 'C', 'D', 'E'],line) > -1) ? "rer" : ((train.number >= 110000 && train.number <= 169999) ? "transilien" : ((train.number >= 830000) ? "ter" : ""))
 				};
 				//train.line = toto;
 				resolve(train);
