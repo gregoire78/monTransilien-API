@@ -138,23 +138,23 @@ function getService(t, sid) {
 			line: t.ligne.idLigne,
 			type: (t.ligne.type == "RER") ? "rer" : 
 			((t.trainNumber >= 110000 && t.trainNumber <= 169999 && t.ligne.type == "TRAIN") ? "transilien" : 
-			((t.trainNumber >= 830000 && t.ligne.type == "TRAIN") ? "ter" : "TRAIN")),
+			(((t.trainNumber >= 830000 || (t.trainNumber >= 16750 && t.trainNumber <= 168749)) && t.ligne.type == "TRAIN") ? "ter" : "TRAIN")),
 		}
 	}
 	switch(t.codeMention) {
-				case 'N':
-					train.state = "à l'heure";
-					break;
-				case 'S':
-					train.state = "supprimé";
-					break;
-				case 'T':
-					train.state = "retardé";
-					break;
-		}
+			case 'N':
+				train.state = "à l'heure";
+				break;
+			case 'S':
+				train.state = "supprimé";
+				break;
+			case 'T':
+				train.state = "retardé";
+				break;
+	}
 	return new Promise((resolve, reject) => {
 		getListPassage("https://transilien.mobi/getDetailForTrain?idTrain="+encodeURI(t.trainNumber)+"&theoric="+encodeURI(t.theorique)+"&origine="+t.gareDepart.codeTR3A+"&destination="+t.gareArrivee.codeTR3A+"&now="+encodeURI(t.trainNumber ? true : false))
-		.then(result => {train.desserte = result})
+		.then(result => {train.journey = result})
 		/*.then(() => getColorLigne(t.ligne.idLigne))
 		.then(toto => {
 			train.route.color = toto.code_hexadecimal;
@@ -263,6 +263,31 @@ module.exports = Trains = {
 		}, () => res.end('error get api'));
 
 		getPassageAPI.then(data => Promise.all(data.slice(0,7).map(train => getService(train, sid))))
+		.then(services => {
+			const station_name = _.result(_.find(gares, function (obj) {
+				return obj.code === idStation;
+			}), 'nom_gare_sncf');
+			const sncf = {
+				station: station_name,
+				trains: services.map((t, k) => {
+					// desserte en string
+					t.journey_text = _.join(_.map(t.journey, (o) => {
+						return o.gare /*+ " ("+moment(o.dep_time, 'kk:mm').format('HH[h]mm')+")"*/;
+					}), ' • '); //·
+					t.journey_text_html = _.join(_.map(t.journey, (o) => {
+						return o.gare;
+					}), ' <span class="dot-separator">•</span> ');
+					
+					const late =t.aimedDepartureTime ? moment(t.expectedDepartureTime).diff(moment(t.aimedDepartureTime), "m") : 0;
+					t.state = (late !== 0 ? `${(late<0?"":"+") + late} min` : t.state);
+					t.aimedDepartureTime = t.aimedDepartureTime ? moment(t.aimedDepartureTime).format('LT'): null;
+					t.expectedDepartureTime = moment(t.expectedDepartureTime).format('LT');
+					//remove null item
+					return _.pickBy(t, _.identity);
+				})
+			}
+			return sncf
+		})
 		.then(sncf => res.json(sncf))
 		.catch(err => {
 			res.status(404).end("Il n'y a aucun prochains départs en temps réél pour la gare de ")
