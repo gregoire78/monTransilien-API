@@ -38,6 +38,7 @@ function getListPassage(url) {
 }
 
 function getResultRER (sid, t, train, stoptimes) {
+	let trip_infos;
 
 	return new Promise((resolve, reject) => {
 
@@ -48,6 +49,19 @@ function getResultRER (sid, t, train, stoptimes) {
 			if (moment(train.aimedDepartureTime).diff(moment(train.expectedDepartureTime), 'd') > 0 || moment(train.expectedDepartureTime) > moment().endOf('day')) { // verifications horaires chevauchement entre deux jours
 				train.aimedDepartureTime = moment(stoptimes[0].departure_time, "kk:mm:ss").add(1, 'd');
 			}
+			gtfs.getTrips({
+				agency_key: 'sncf-routes',
+				trip_id: stoptimes[0].trip_id
+			})
+			.then(trip => { trip_infos = trip[0] })
+			.then(() => gtfs.getRoutes({
+				agency_key: 'sncf-routes',
+				route_id: trip_infos.route_id
+			}))
+			.then(routes => route_infos = routes[0], () => resolve(['error route id']))
+			train.route.long_name = route_infos.route_long_name;
+			train.route.color = "#"+route_infos.route_color;
+			train.route.infos = route_infos.route_long_name.match(/via .*/gmi);
 			resolve(train)
 		}
 	});
@@ -66,7 +80,7 @@ function getResultTrain (sid, t, train, service) {
 				service_id: service.toString(),
 				trip_id: {$regex: new RegExp(`DUASN${('0' + train.number).slice(-6)}`)}
 			})
-			//.then(results => paireVSimpaire(results, train, service))
+			.then(results => paireVSimpaire(results, train, service))
 			.then(trip => {trip_infos = trip[0]}, () => resolve(['error trip id']))
 			.then(() => gtfs.getStoptimes({
 				agency_key: 'sncf-routes',
@@ -87,7 +101,7 @@ function getResultTrain (sid, t, train, service) {
 							agency_key: 'sncf-routes',
 							trip_id: trip_infos.trip_id
 						})
-						.then(response => {resolve({unexpected: 1, resolve})});
+						.then(response => {resolve({unexpected: 1, response})});
 					} else {
 						resolve(stopTimes);
 					}
@@ -102,7 +116,15 @@ function getResultTrain (sid, t, train, service) {
 				} else train.aimedDepartureTime = train.expectedDepartureTime
 				//console.log(train.number, stopTimes[0].trip_id);
 			})
+			.then(() => gtfs.getRoutes({
+				agency_key: 'sncf-routes',
+				route_id: trip_infos.route_id
+			}))
+			.then(routes => route_infos = routes[0], () => resolve(['error route id']))
 			.then(() => {
+				train.route.long_name = route_infos.route_long_name;
+				train.route.color = "#"+route_infos.route_color;
+				train.route.infos = _.first(route_infos.route_long_name.match(/via .*/gmi));
 				resolve(train);
 			})
 		}
@@ -133,14 +155,18 @@ function getService(t, sid) {
 		terminus: t.gareArrivee.name,
 		departure: t.gareDepart.name,
 		expectedDepartureTime: moment(t.trainDate + " " + t.trainHour, "DD/MM/YYYY HH:mm"),
+		aimedDepartureTime: null,
+		state: null,
 		lane: t.trainLane,
 		route: {
-			line: t.ligne.idLigne,
+			line: null,
 			type: (t.ligne.type == "RER") ? "rer" : 
 			((t.trainNumber >= 110000 && t.trainNumber <= 169999 && t.ligne.type == "TRAIN") ? "transilien" : 
 			(((t.trainNumber >= 830000 || (t.trainNumber >= 16750 && t.trainNumber <= 168749)) && t.ligne.type == "TRAIN") ? "ter" : "TRAIN")),
 		}
 	}
+	train.route.line = train.route.type !== "ter" ? t.ligne.idLigne : null;
+	train.route = _.pickBy(train.route, _.identity);
 	switch(t.codeMention) {
 			case 'N':
 				train.state = "à l'heure";
@@ -262,7 +288,14 @@ module.exports = Trains = {
 			return JSON.parse($('body').find("#infos").val());
 		}, () => res.end('error get api'));
 
-		getPassageAPI.then(data => Promise.all(data.slice(0,7).map(train => getService(train, sid))))
+		
+		getPassageAPI
+		.then(data => { // filtrage des trains autre que rer ou transilien et certains ter (pour paris montparnasse par exemple)
+			return _.filter(data, function(t) {
+				return (t.trainNumber >= 110000 && t.trainNumber <= 169999) || t.trainNumber >= 830000 || (t.trainNumber >= 16750 && t.trainNumber <= 168749) || t.ligne.type == "RER"; 
+			});
+		})
+		.then(data => Promise.all(data.slice(0,7).map(train => getService(train, sid))))
 		.then(services => {
 			const station_name = _.result(_.find(gares, function (obj) {
 				return obj.code === idStation;
@@ -290,7 +323,7 @@ module.exports = Trains = {
 		})
 		.then(sncf => res.json(sncf))
 		.catch(err => {
-			res.status(404).end("Il n'y a aucun prochains départs en temps réél pour la gare de ")
+			res.status(404).end("Il n'y a aucun prochains départs en temps réél pour la gare")
 		})
 	}
 };
