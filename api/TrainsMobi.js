@@ -59,10 +59,12 @@ function getResultRER (sid, t, train, stoptimes) {
 				route_id: trip_infos.route_id
 			}))
 			.then(routes => route_infos = routes[0], () => resolve(['error route id']))
-			train.route.long_name = route_infos.route_long_name;
-			train.route.color = "#"+route_infos.route_color;
-			train.route.infos = route_infos.route_long_name.match(/via .*/gmi);
-			resolve(train)
+			.then(() => {
+				train.route.long_name = route_infos.route_long_name;
+				train.route.color = "#"+route_infos.route_color;
+				train.route.infos = _.first(route_infos.route_long_name.match(/via .*/gmi));
+				resolve(train);
+			})
 		}
 	});
 }
