@@ -62,7 +62,7 @@ function getResultRER (sid, t, train, stoptimes) {
 			.then(() => {
 				train.route.long_name = route_infos.route_long_name;
 				train.route.color = "#"+route_infos.route_color;
-				train.route.infos = _.first(route_infos.route_long_name.match(/via .*/gmi));
+				//train.route.infos = _.first(route_infos.route_long_name.match(/via .*/gmi));
 				resolve(train);
 			})
 		}
@@ -126,7 +126,7 @@ function getResultTrain (sid, t, train, service) {
 			.then(() => {
 				train.route.long_name = route_infos.route_long_name;
 				train.route.color = "#"+route_infos.route_color;
-				train.route.infos = _.first(route_infos.route_long_name.match(/via .*/gmi));
+				//train.route.infos = _.first(route_infos.route_long_name.match(/via .*/gmi));
 				resolve(train);
 			})
 		}
