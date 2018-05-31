@@ -1720,6 +1720,11 @@
 		"nom_gare_sncf": "Paris Montparnasse"
 	},
 	{
+		"code": "PVA",
+		"uic7": 8739100,
+		"nom_gare_sncf": "Paris Montparnasse"
+	},
+	{
 		"code": "VAU",
 		"uic7": 8739110,
 		"nom_gare_sncf": "Paris Vaugirard"

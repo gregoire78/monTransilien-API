@@ -273,12 +273,13 @@ function getService(t, sid) {
 		}))
 		.then(() => resolve(train))
 	});
-};
+}
 
 module.exports = Trains = {
 	get: function (req, res, next) {
 		
 		const idStation = req.query.code_tr3a;
+		let stationName;
 
 		const sid = _.result(_.find(gares, function (obj) {
 			return obj.code === idStation;
@@ -287,26 +288,25 @@ module.exports = Trains = {
 		// Recupère le resultat de la page html mobi SNCF
 		const getPassageAPI = getSncfRealTimeApi(idStation).then(response => {
 			const $ = cheerio.load(response.data);
-			return JSON.parse($('body').find("#infos").val());
+			return $;
 		}, () => res.end('error get api'));
 
 		
 		getPassageAPI
-		.then(data => { // filtrage des trains autre que rer ou transilien et certains ter (pour paris montparnasse par exemple)
-			return _.filter(data, function(t) {
+		.then($ => { // filtrage des trains autre que rer ou transilien et certains ter (pour paris montparnasse par exemple)
+			stationName = $('body').find(".GareDepart > .bluefont").text().trim();
+			return _.filter(JSON.parse($('body').find("#infos").val()), function(t) {
 				return (t.trainNumber >= 110000 && t.trainNumber <= 169999) || t.trainNumber >= 830000 || (t.trainNumber >= 16750 && t.trainNumber <= 168749) || t.ligne.type == "RER"; 
 			});
 		})
 		.then(data => Promise.all(data.slice(0,7).map(train => getService(train, sid))))
 		.then(services => {
-			const station_name = _.result(_.find(gares, function (obj) {
-				return obj.code === idStation;
-			}), 'nom_gare_sncf');
+			const station_name = stationName;
 			const sncf = {
 				station: station_name,
 				trains: services.map((t, k) => {
 					// desserte en string
-					t.journey_text = _.join(_.map(t.journey, (o) => {
+					t.journey_text = t.journey.length == 0 ? (station_name == t.terminus ? "terminus" : "Desserte indisponible") : _.join(_.map(t.journey, (o) => {
 						return o.gare /*+ " ("+moment(o.dep_time, 'kk:mm').format('HH[h]mm')+")"*/;
 					}), ' • '); //·
 					t.journey_text_html = _.join(_.map(t.journey, (o) => {
