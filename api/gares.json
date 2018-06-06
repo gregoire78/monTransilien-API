@@ -791,8 +791,8 @@
 	},
 	{
 		"code": "GAW",
-		"uic7": 8775801,
-		"nom_gare_sncf": "La Défense Grande Arche"
+		"uic7": 8738221,
+		"nom_gare_sncf": "La Défense"
 	},
 	{
 		"code": "GBG",
@@ -1061,8 +1061,8 @@
 	},
 	{
 		"code": "LDU",
-		"uic7": 8738221,
-		"nom_gare_sncf": "La Défense"
+		"uic7": 8775801,
+		"nom_gare_sncf": "La Défense Grande Arche"
 	},
 	{
 		"code": "LEG",

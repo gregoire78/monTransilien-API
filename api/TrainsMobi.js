@@ -314,7 +314,7 @@ module.exports = Trains = {
 					}), ' <span class="dot-separator">•</span> ');
 					
 					const late =t.aimedDepartureTime ? moment(t.expectedDepartureTime).diff(moment(t.aimedDepartureTime), "m") : 0;
-					t.state = (late !== 0 ? `${(late<0?"":"+") + late} min` : t.state);
+					t.state = (late !== 0 ? `${(late<0?"":"+") + late} min` : t.aimedDepartureTime ? "à l'heure" : t.state);
 					t.aimedDepartureTime = t.aimedDepartureTime ? moment(t.aimedDepartureTime).format('LT'): null;
 					t.expectedDepartureTime = moment(t.expectedDepartureTime).format('LT');
 					//remove null item
