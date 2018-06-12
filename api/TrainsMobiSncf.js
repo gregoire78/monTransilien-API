@@ -33,8 +33,19 @@ function getInfosPointArret(uic8) {
 function getMoreInformations(uic) {
 	return axios.get(`https://www.sncf.com/api/iv/1.0/infoVoy/rechercherProchainsDeparts?codeZoneArret=OCE${uic}&indicateurReponseGaresSecondaires=true&format=html`)
 	.then(result => {
-		return result.data.reponseRechercherProchainsDeparts.reponse.listeResultats.resultat;
+		let lastRes  = _.last(result.data.reponseRechercherProchainsDeparts.reponse.listeResultats.resultat).donnees;
+		if(lastRes.listeHoraires)
+			return lastRes;
+		else
+			return result.data.reponseRechercherProchainsDeparts.reponse.listeResultats.resultat[0].donnees;
 	});
+}
+
+function rechercherListeCirculations(numero, date) {
+	return axios.get(`https://www.sncf.com/api/iv/1.0/infoVoy/rechercherListeCirculations?numero=${numero}&dateCirculation=${date}&codeZoneArret&typeHoraire=TEMPS_REEL&codeZoneArretDepart&codeZoneArretArrivee&compositions=0&codeCirculation&format=html`)
+	.then(response => {
+		return response.data.reponseRechercherListeCirculations.reponse.listeResultats.resultat[0].donnees.listeCirculations.circulation[0]
+	})
 }
 
 function getListPassage(url) {
@@ -173,27 +184,44 @@ function getService(t, sid) {
 		expectedDepartureTime: moment(t.trainDate + " " + t.trainHour, "DD/MM/YYYY HH:mm"),
 		aimedDepartureTime: null,
 		state: null,
+		nature: null,
 		lane: t.trainLane,
 		route: {
 			line: null,
 			type: (t.ligne.type == "RER") ? "rer" : 
 			((t.trainNumber >= 110000 && t.trainNumber <= 169999 && t.ligne.type == "TRAIN") ? "transilien" : 
 			(((t.trainNumber >= 830000 || (t.trainNumber >= 16750 && t.trainNumber <= 168749)) && t.ligne.type == "TRAIN") ? "ter" : "TRAIN")),
-		}
+		},
+		journey: null,
+		journey_text: null,
+		journey_text_html: null,
+		SncfMore: t.SncfMore
 	}
 	train.route.line = train.route.type !== "ter" ? t.ligne.idLigne : null;
 	train.route = _.pickBy(train.route, _.identity);
 	switch(t.codeMention) {
-			case 'N':
-				train.state = "à l'heure";
+		case 'N':
+			train.state = "à l'heure";
+			break;
+		case 'S':
+			train.state = "supprimé";
+			break;
+		case 'T':
+			train.state = "retardé";
+			break;
+	};
+
+	if(train.SncfMore) {
+		switch(train.SncfMore.circulation.natureTrain) {
+			case 'L':
+				train.nature = "Long";
 				break;
-			case 'S':
-				train.state = "supprimé";
+			case 'C':
+				train.nature = "Court";
 				break;
-			case 'T':
-				train.state = "retardé";
-				break;
+		};
 	}
+	
 	return new Promise((resolve, reject) => {
 		getListPassage("https://transilien.mobi/getDetailForTrain?idTrain="+encodeURI(t.trainNumber)+"&theoric="+encodeURI(t.theorique)+"&origine="+t.gareDepart.codeTR3A+"&destination="+t.gareArrivee.codeTR3A+"&now="+encodeURI(t.trainNumber ? true : false))
 		.then(result => {train.journey = result})
@@ -306,11 +334,6 @@ module.exports = Trains = {
 			return $;
 		}, () => res.end('error get api'));
 
-		getInfosPointArret(sid).then(data => {
-			return codeUic = data.code_uic;
-		}).then(uic => getMoreInformations(uic))
-		.then(console.log)
-
 		getPassageAPI
 		.then($ => { // filtrage des trains autre que rer ou transilien et certains ter (pour paris montparnasse par exemple)
 			stationName = $('body').find(".GareDepart > .bluefont").text().trim();
@@ -318,11 +341,29 @@ module.exports = Trains = {
 				return (t.trainNumber >= 110000 && t.trainNumber <= 169999) || t.trainNumber >= 830000 || (t.trainNumber >= 16750 && t.trainNumber <= 168749) || t.ligne.type == "RER"; 
 			});
 		})
+		// plus d'infos générales avec le site de las sncf -- https://www.sncf.com/fr/gares/
+		.then(datu => {
+			return new Promise((resolve, reject) => {
+				getInfosPointArret(sid)
+				.then(data => {
+					return codeUic = data.code_uic;
+				}).then(uic => getMoreInformations(uic))
+				.then(data => {
+					return datu.map(obj => {
+						return _.assign(obj, {SncfMore : _.find(data.listeHoraires.horaire, {circulation:{numero: obj.trainNumber}}), uic: codeUic});
+					})
+				})
+				.then(lol => resolve(lol))
+			})
+		})
 		.then(data => Promise.all(data.slice(0,7).map(train => getService(train, sid))))
 		.then(services => {
 			const station_name = stationName;
 			const sncf = {
-				station: station_name,
+				station: {
+					name : station_name,
+					uic: codeUic
+				},
 				trains: services.map((t, k) => {
 					// desserte en string
 					t.journey_text = t.journey.length == 0 ? (station_name == t.terminus ? "terminus" : "Desserte indisponible") : _.join(_.map(t.journey, (o) => {
