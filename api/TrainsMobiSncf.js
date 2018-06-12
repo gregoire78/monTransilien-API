@@ -214,10 +214,10 @@ function getService(t, sid) {
 	if(train.SncfMore) {
 		switch(train.SncfMore.circulation.natureTrain) {
 			case 'L':
-				train.nature = "Long";
+				train.nature = "long";
 				break;
 			case 'C':
-				train.nature = "Court";
+				train.nature = "court";
 				break;
 		};
 	}
