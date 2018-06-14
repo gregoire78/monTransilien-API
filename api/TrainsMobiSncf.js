@@ -209,6 +209,9 @@ function getService(t, sid) {
 		case 'T':
 			train.state = "retardé";
 			break;
+		default:
+			train.state = "à l'heure";
+			break;
 	};
 
 	if(train.SncfMore) {
@@ -373,8 +376,8 @@ module.exports = Trains = {
 						return o.gare;
 					}), ' <span class="dot-separator">•</span> ');
 					
-					const late =t.aimedDepartureTime ? moment(t.expectedDepartureTime).diff(moment(t.aimedDepartureTime), "m") : 0;
-					t.state = (late !== 0 ? `${(late<0?"":"+") + late} min` : t.state);
+					const late =t.aimedDepartureTime ? moment(t.expectedDepartureTime).diff(moment(t.aimedDepartureTime), "m") : null;
+					t.state = (late !== null ? (late !== 0 ? `${(late<0?"":"+") + late} min` : t.state) : null);
 					t.aimedDepartureTime = t.aimedDepartureTime ? moment(t.aimedDepartureTime).format('LT'): null;
 					t.expectedDepartureTime = moment(t.expectedDepartureTime).format('LT');
 					//remove null item

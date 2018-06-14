@@ -179,6 +179,9 @@ function getService(t, sid) {
 			case 'T':
 				train.state = "retardé";
 				break;
+			default:
+				train.state = "à l'heure";
+				break;
 	}
 	return new Promise((resolve, reject) => {
 		getListPassage("https://transilien.mobi/getDetailForTrain?idTrain="+encodeURI(t.trainNumber)+"&theoric="+encodeURI(t.theorique)+"&origine="+t.gareDepart.codeTR3A+"&destination="+t.gareArrivee.codeTR3A+"&now="+encodeURI(t.trainNumber ? true : false))
@@ -313,8 +316,8 @@ module.exports = Trains = {
 						return o.gare;
 					}), ' <span class="dot-separator">•</span> ');
 					
-					const late =t.aimedDepartureTime ? moment(t.expectedDepartureTime).diff(moment(t.aimedDepartureTime), "m") : 0;
-					t.state = (late !== 0 ? `${(late<0?"":"+") + late} min` : t.state);
+					const late =t.aimedDepartureTime ? moment(t.expectedDepartureTime).diff(moment(t.aimedDepartureTime), "m") : null;
+					t.state = (late !== null ? (late !== 0 ? `${(late<0?"":"+") + late} min` : t.state) : null);
 					t.aimedDepartureTime = t.aimedDepartureTime ? moment(t.aimedDepartureTime).format('LT'): null;
 					t.expectedDepartureTime = moment(t.expectedDepartureTime).format('LT');
 					//remove null item
