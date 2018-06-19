@@ -292,7 +292,7 @@ module.exports = Trains = {
 		const getPassageAPI = getSncfRealTimeApi(idStation).then(response => {
 			const $ = cheerio.load(response.data);
 			return $;
-		}, () => res.end('error get api'));
+		});
 
 		
 		getPassageAPI
