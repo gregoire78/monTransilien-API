@@ -3,3 +3,4 @@ module.exports = MONGO_PWD = process.env.MONGO_PWD;
 module.exports = MONGO_IP = process.env.MONGO_IP;
 module.exports = SNCFAPI_USERNAME = process.env.SNCFAPI_USERNAME;
 module.exports = SNCFAPI_PWD = process.env.SNCFAPI_PWD;
+module.exports = SNCFAPI_KEY = process.env.SNCFAPI_KEY;
