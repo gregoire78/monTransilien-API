@@ -31,21 +31,34 @@ const getLine = (headsign) => {
 }
 
 const getVehiculeJourney = (train) => {
-	console.log(`https://api.sncf.com/v1/coverage/sncf/vehicle_journeys?headsign=${train.number}&since=${moment(train.expectedDepartureTime).format('YYYYMMDD[T000000]')}&until=${moment(train.expectedDepartureTime).format('YYYYMMDD[T235959]')}`)
 	return axios.get(`https://api.sncf.com/v1/coverage/sncf/vehicle_journeys?headsign=${train.number}&since=${moment(train.expectedDepartureTime).format('YYYYMMDD[T000000]')}&until=${moment(train.expectedDepartureTime).format('YYYYMMDD[T235959]')}`, {
 		headers: {
 			'Authorization': SNCFAPI_KEY
 		}
 	})
-	.then(response => { return response.data })
-	.catch(err => console.log( train.number, err.response.data))
+	.then(response => { 
+		console.log(`https://api.sncf.com/v1/coverage/sncf/vehicle_journeys?headsign=${train.number}&since=${moment(train.expectedDepartureTime).format('YYYYMMDD[T000000]')}&until=${moment(train.expectedDepartureTime).format('YYYYMMDD[T235959]')}`)		
+		return response.data
+	})
+	.catch(err => {
+		return new Promise(resolve => {
+			console.log(`https://api.sncf.com/v1/coverage/sncf/vehicle_journeys?headsign=${train.number}`)
+			return axios.get(`https://api.sncf.com/v1/coverage/sncf/vehicle_journeys?headsign=${train.number}`, {
+				headers: {
+					'Authorization': SNCFAPI_KEY
+				}
+			})
+			.then(response => { resolve(response.data) })
+			.catch(err => {resolve({})})
+		})
+	})
 }
 
-const getUIC7 = (tr3a) => {
-	const sid = _.result(_.find(gares, (obj) => {
+const getUIC = (tr3a) => {
+	const uic7 = _.result(_.find(gares, (obj) => {
 		return obj.code === tr3a;
 	}), 'uic7');
-	return getInfosPointArret(sid);
+	return getInfosPointArret(uic7).then(data => {return data.code_uic});
 }
 
 const getInfosPointArret = (uic7) => {
@@ -94,25 +107,29 @@ const getService = (t) => {
 	return new Promise((resolve, reject) => {
 		getVehiculeJourney(train)
 		.then(result => {
-			train.journey = result.vehicle_journeys[0].stop_times;
-			train.journey_text = train.journey.length == 0 ? "Desserte indisponible" : train.departure == train.terminus ? "terminus" : _.join(_.map(train.journey, (o) => {
-				return o.stop_point.name + " ("+moment(o.departure_time, 'HHmmss').format('HH[h]mm')+")";
-			}), ' • ');
-			train.journey_text_html = _.join(_.map(train.journey, (o) => {
-				return o.stop_point.name;
-			}), ' <span class="dot-separator">•</span> ');
+			if(!_.isEmpty(result)){
+				train.journey = result.vehicle_journeys[0].stop_times;
+				train.journey_text = train.journey.length == 0 ? "Desserte indisponible" : train.departure == train.terminus ? "terminus" : _.join(_.map(train.journey, (o) => {
+					return o.stop_point.name /*+ " ("+moment(o.departure_time, 'HHmmss').format('HH[h]mm')+")"*/;
+				}), ' • ');
+				train.journey_text_html = _.join(_.map(train.journey, (o) => {
+					return o.stop_point.name /*+ " ("+moment(o.departure_time, 'HHmmss').format('HH[h]mm')+")"*/;
+				}), ' <span class="dot-separator">•</span> ');
+			}
+			train.expectedDepartureTime = moment(train.expectedDepartureTime).format('LT');
+			return _.pickBy(train, _.identity)
 		})
-		.then(data => resolve(train))
+		.then(data => resolve(data))
 	})
 }
 
 module.exports = Departures = {
 	get : (req, res, next) =>  {
-		const uic = req.query.uic;
+		const tr3a = req.query.uic;
 
-		getUIC7(uic).then(data => {console.log(data.code_uic)})
+		getUIC(tr3a).then(console.log)
 		
-		const getPassageAPI = getSncfRealTimeApi(uic).then(response => {
+		const getPassageAPI = getSncfRealTimeApi(tr3a).then(response => {
 			const $ = cheerio.load(response.data);
 			return $;
 		});
@@ -122,7 +139,7 @@ module.exports = Departures = {
 			stationName = $('body').find(".GareDepart > .bluefont").text().trim();
 			return JSON.parse($('body').find("#infos").val())
 		})
-		.then(data => Promise.all(data.slice(0,7).map(train => getService(train))))
+		.then(data => Promise.all(data.slice(0,6).map(train => getService(train))))
 		.then(sncf => res.json(sncf))
 		.catch(err => {
 			res.status(404).end("Il n'y a aucun prochains départs en temps réél pour la gare")
