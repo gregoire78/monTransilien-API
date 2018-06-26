@@ -2,6 +2,7 @@ const axios = require('axios');
 const _ = require('lodash');
 const moment = require('moment-timezone');
 const cheerio = require('cheerio');
+const gares = require('./garesNames.json');
 
 moment.tz.setDefault("Europe/Paris");
 moment.locale('fr');
@@ -38,6 +39,20 @@ const getVehiculeJourney = (train) => {
 	})
 	.then(response => { return response.data })
 	.catch(err => console.log( train.number, err.response.data))
+}
+
+const getUIC7 = (tr3a) => {
+	const sid = _.result(_.find(gares, (obj) => {
+		return obj.code === tr3a;
+	}), 'uic7');
+	return getInfosPointArret(sid);
+}
+
+const getInfosPointArret = (uic7) => {
+	return axios.get(`https://data.sncf.com/api/records/1.0/search/?dataset=sncf-gares-et-arrets-transilien-ile-de-france&q=${uic7}&rows=1`)
+	.then(response => {
+		return !_.isEmpty(response.data.records) ? response.data.records[0].fields : uic7;
+	})
 }
 
 const getService = (t) => {
@@ -78,6 +93,15 @@ const getService = (t) => {
 	};
 	return new Promise((resolve, reject) => {
 		getVehiculeJourney(train)
+		.then(result => {
+			train.journey = result.vehicle_journeys[0].stop_times;
+			train.journey_text = train.journey.length == 0 ? "Desserte indisponible" : train.departure == train.terminus ? "terminus" : _.join(_.map(train.journey, (o) => {
+				return o.stop_point.name + " ("+moment(o.departure_time, 'HHmmss').format('HH[h]mm')+")";
+			}), ' • ');
+			train.journey_text_html = _.join(_.map(train.journey, (o) => {
+				return o.stop_point.name;
+			}), ' <span class="dot-separator">•</span> ');
+		})
 		.then(data => resolve(train))
 	})
 }
@@ -85,6 +109,8 @@ const getService = (t) => {
 module.exports = Departures = {
 	get : (req, res, next) =>  {
 		const uic = req.query.uic;
+
+		getUIC7(uic).then(data => {console.log(data.code_uic)})
 		
 		const getPassageAPI = getSncfRealTimeApi(uic).then(response => {
 			const $ = cheerio.load(response.data);
