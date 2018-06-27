@@ -68,7 +68,19 @@ const getInfosPointArret = (uic7) => {
 	})
 }
 
-const getService = (t) => {
+const getMoreInformations = (uic) => {
+	return axios.get(`https://www.sncf.com/api/iv/1.0/infoVoy/rechercherProchainsDeparts?codeZoneArret=OCE${uic}&indicateurReponseGaresSecondaires=true&format=html`)
+	.then(result => {
+		let lastRes  = _.last(result.data.reponseRechercherProchainsDeparts.reponse.listeResultats.resultat).donnees;
+		if(lastRes.listeHoraires)
+			return lastRes;
+		else
+			return result.data.reponseRechercherProchainsDeparts.reponse.listeResultats.resultat[0].donnees;
+	});
+}
+
+const getService = (t, uic, more = null) => {
+	const SncfMore = _.find(more.listeHoraires.horaire, {circulation:{numero: t.trainNumber}})
 	const train = {
 		name: t.trainMissionCode,
 		number: t.trainNumber,
@@ -77,6 +89,7 @@ const getService = (t) => {
 		expectedDepartureTime: moment(t.trainDate + " " + t.trainHour, "DD/MM/YYYY HH:mm"),
 		aimedDepartureTime: null,
 		state: null,
+		nature: null,
 		lane: t.trainLane,
 		route: {
 			line: null,
@@ -85,8 +98,9 @@ const getService = (t) => {
 			(((t.trainNumber >= 830000 || (t.trainNumber >= 16750 && t.trainNumber <= 168749)) && t.ligne.type == "TRAIN") ? "ter" : "TRAIN")),
 		},
 		journey: null,
+		journey_redux: null,
 		journey_text: null,
-		journey_text_html: null,
+		journey_text_html: null
 	}
 	train.route.line = train.route.type !== "ter" ? t.ligne.idLigne : null;
 	train.route = _.pickBy(train.route, _.identity);
@@ -104,15 +118,39 @@ const getService = (t) => {
 			train.state = "à l'heure";
 			break;
 	};
+	if(SncfMore) {
+		switch(SncfMore.circulation.natureTrain) {
+			case 'L':
+				train.nature = "long";
+				break;
+			case 'C':
+				train.nature = "court";
+				break;
+		};
+	};
 	return new Promise((resolve, reject) => {
 		getVehiculeJourney(train)
 		.then(result => {
 			if(!_.isEmpty(result)){
 				train.journey = result.vehicle_journeys[0].stop_times;
-				train.journey_text = train.journey.length == 0 ? "Desserte indisponible" : train.departure == train.terminus ? "terminus" : _.join(_.map(train.journey, (o) => {
+				let ok = false;
+				train.journey_redux = _.compact(_.map(train.journey, (o) => { // recevoir seulement la suite
+					if (ok) {
+						return o;
+					}
+					const start = o.stop_point.id.split("-").pop() == uic;
+					if(start) {
+						train.aimedDepartureTime = moment(o.departure_time, 'HHmmss');
+						const late = moment(train.expectedDepartureTime).diff(moment(train.aimedDepartureTime), "m");
+						train.state = (late !== null ? (late !== 0 ? `${(late<0?"":"+") + late} min` : train.state) : null);
+						train.aimedDepartureTime = moment(train.aimedDepartureTime).format('LT');
+					}
+					ok = start;
+				}));
+				train.journey_text = train.journey_redux.length == 0 ? "Desserte indisponible" : train.departure == train.terminus ? "terminus" : _.join(_.map(train.journey_redux, (o) => {
 					return o.stop_point.name /*+ " ("+moment(o.departure_time, 'HHmmss').format('HH[h]mm')+")"*/;
 				}), ' • ');
-				train.journey_text_html = _.join(_.map(train.journey, (o) => {
+				train.journey_text_html = _.join(_.map(train.journey_redux, (o) => {
 					return o.stop_point.name /*+ " ("+moment(o.departure_time, 'HHmmss').format('HH[h]mm')+")"*/;
 				}), ' <span class="dot-separator">•</span> ');
 			}
@@ -126,21 +164,27 @@ const getService = (t) => {
 module.exports = Departures = {
 	get : (req, res, next) =>  {
 		const tr3a = req.query.uic;
-
-		getUIC(tr3a).then(console.log)
+		let uic, moreInfos, sncfInfos, stationName;
 		
 		const getPassageAPI = getSncfRealTimeApi(tr3a).then(response => {
 			const $ = cheerio.load(response.data);
 			return $;
 		});
 
-		getPassageAPI
-		.then($ => { // filtrage des trains autre que rer ou transilien et certains ter (pour paris montparnasse par exemple)
+		getUIC(tr3a)
+		.then(d => uic = d)
+		.then(() => getMoreInformations(uic))
+		.then(data => moreInfos = data)
+		.then(()=>getPassageAPI)
+		.then($ => {
+			// messages traffic
+			//sncfInfos = _.uniqBy(_.map(moreInfos.listeHoraires.horaire, 'circulation.ligne.listeMessagesConjoncturels.messagesConjoncturels'), (e)=>{return e.titre})
 			stationName = $('body').find(".GareDepart > .bluefont").text().trim();
+			//console.log(uic = /'&departureCodeUIC8=(\d{8})'/gm.exec($('script[type="text/javascript"]').get()[7].children[0].data)[1])
 			return JSON.parse($('body').find("#infos").val())
 		})
-		.then(data => Promise.all(data.slice(0,6).map(train => getService(train))))
-		.then(sncf => res.json(sncf))
+		.then(data => Promise.all(data.slice(0,6).map(train => getService(train, uic, moreInfos))))
+		.then(sncf => res.json({station: {name: stationName, uic: uic}, trains : sncf}))
 		.catch(err => {
 			res.status(404).end("Il n'y a aucun prochains départs en temps réél pour la gare")
 		})
