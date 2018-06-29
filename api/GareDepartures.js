@@ -58,7 +58,7 @@ const getUIC = (tr3a) => {
 	const uic7 = _.result(_.find(gares, (obj) => {
 		return obj.code === tr3a;
 	}), 'uic7');
-	return getInfosPointArret(uic7).then(data => {return data.code_uic});
+	return getInfosPointArret(uic7).then(data => {return data});
 }
 
 const getInfosPointArret = (uic7) => {
@@ -164,7 +164,7 @@ const getService = (t, uic, more = null) => {
 module.exports = Departures = {
 	get : (req, res, next) =>  {
 		const tr3a = req.query.uic;
-		let uic, moreInfos, sncfInfos, stationName;
+		let uic,gps, moreInfos, sncfInfos, stationName;
 		
 		const getPassageAPI = getSncfRealTimeApi(tr3a).then(response => {
 			const $ = cheerio.load(response.data);
@@ -172,7 +172,7 @@ module.exports = Departures = {
 		});
 
 		getUIC(tr3a)
-		.then(d => uic = d)
+		.then(d => {uic = d.code_uic, gps = d.coord_gps_wgs84})
 		.then(() => getMoreInformations(uic))
 		.then(data => moreInfos = data)
 		.then(()=>getPassageAPI)
@@ -184,7 +184,7 @@ module.exports = Departures = {
 			return JSON.parse($('body').find("#infos").val())
 		})
 		.then(data => Promise.all(data.slice(0,6).map(train => getService(train, uic, moreInfos))))
-		.then(sncf => res.json({station: {name: stationName, uic: uic}, trains : sncf}))
+		.then(sncf => res.json({station: {name: stationName, uic: uic, gps: {lat: gps[0], long: gps[1]}}, trains : sncf}))
 		.catch(err => {
 			res.status(404).end("Il n'y a aucun prochains départs en temps réél pour la gare")
 		})
