@@ -3,6 +3,7 @@ const _ = require('lodash');
 const moment = require('moment-timezone');
 const cheerio = require('cheerio');
 const gares = require('./garesNames.json');
+const LiveMap = require('./livemap')().livemap;
 
 moment.tz.setDefault("Europe/Paris");
 moment.locale('fr');
@@ -79,7 +80,7 @@ const getMoreInformations = (uic) => {
 	});
 }
 
-const getService = (t, uic, more = null) => {
+const getService = (t, uic, more = null, livemap = null) => {
 	const SncfMore = _.find(more.listeHoraires.horaire, {circulation:{numero: t.trainNumber}})
 	const train = {
 		name: t.trainMissionCode,
@@ -91,6 +92,7 @@ const getService = (t, uic, more = null) => {
 		state: null,
 		nature: null,
 		lane: t.trainLane,
+		distance: null,
 		route: {
 			line: null,
 			type: (t.ligne.type == "RER") ? "rer" : 
@@ -154,6 +156,7 @@ const getService = (t, uic, more = null) => {
 					return o.stop_point.name /*+ " ("+moment(o.departure_time, 'HHmmss').format('HH[h]mm')+")"*/;
 				}), ' <span class="dot-separator">•</span> ');
 			}
+			train.distance = livemap.filter(obj => {return obj.savedNumber == train.number})[0];
 			train.expectedDepartureTime = moment(train.expectedDepartureTime).format('LT');
 			return _.pickBy(train, _.identity)
 		})
@@ -164,7 +167,7 @@ const getService = (t, uic, more = null) => {
 module.exports = Departures = {
 	get : (req, res, next) =>  {
 		const tr3a = req.query.uic;
-		let uic,gps, moreInfos, sncfInfos, stationName;
+		let uic,gps, moreInfos, sncfInfos, stationName, liveMap;
 		
 		const getPassageAPI = getSncfRealTimeApi(tr3a).then(response => {
 			const $ = cheerio.load(response.data);
@@ -172,10 +175,13 @@ module.exports = Departures = {
 		});
 
 		getUIC(tr3a)
-		.then(d => {uic = d.code_uic, gps = d.coord_gps_wgs84})
-		.then(() => getMoreInformations(uic))
-		.then(data => moreInfos = data)
-		.then(()=>getPassageAPI)
+		.then(d => {uic = d.code_uic, gps = {lat: d.coord_gps_wgs84[0], long: d.coord_gps_wgs84[1]}})
+		.then(() => Promise.all([LiveMap(gps), getMoreInformations(uic), getPassageAPI]))
+		.then(values => { 
+			liveMap = values[0];
+			moreInfos = values[1]; 
+			return values[2];
+		})
 		.then($ => {
 			// messages traffic
 			//sncfInfos = _.uniqBy(_.map(moreInfos.listeHoraires.horaire, 'circulation.ligne.listeMessagesConjoncturels.messagesConjoncturels'), (e)=>{return e.titre})
@@ -183,8 +189,8 @@ module.exports = Departures = {
 			//console.log(uic = /'&departureCodeUIC8=(\d{8})'/gm.exec($('script[type="text/javascript"]').get()[7].children[0].data)[1])
 			return JSON.parse($('body').find("#infos").val())
 		})
-		.then(data => Promise.all(data.slice(0,6).map(train => getService(train, uic, moreInfos))))
-		.then(sncf => res.json({station: {name: stationName, uic: uic, gps: {lat: gps[0], long: gps[1]}}, trains : sncf}))
+		.then(data => Promise.all(data.slice(0,7).map(train => getService(train, uic, moreInfos, liveMap))))
+		.then(sncf => res.json({station: {name: stationName, uic: uic, gps: gps}, trains : sncf}))
 		.catch(err => {
 			res.status(404).end("Il n'y a aucun prochains départs en temps réél pour la gare")
 		})

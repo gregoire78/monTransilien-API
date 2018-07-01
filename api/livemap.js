@@ -45,7 +45,7 @@ const realTimeMap = (stationCoords) => Promise.all([realTimeTrains(stationCoords
 		}
 	}))
 
-module.exports = Trains = {
+/*module.exports = Trains = {
 	get: function (req, res, next) {
 		const mapdata = realTimeMap({lat: req.query.lat, long: req.query.long})
 		if(req.params.filter) {
@@ -55,5 +55,29 @@ module.exports = Trains = {
 			mapdata.then(data => res.json(data))
 		}
 		
+	},
+	livemap: function(gps) {
+		return realTimeMap({lat: gps.lat, long: gps.long})
 	}
+}*/
+
+module.exports = function() {
+	function get(req, res, next) {
+		const mapdata = realTimeMap({lat: req.query.lat, long: req.query.long})
+		if(req.params.filter) {
+			mapdata.then(res=> { return res.filter(obj => {return obj.savedNumber == req.params.filter})[0]})
+			.then(data => res.json(data))
+		} else {
+			mapdata.then(data => res.json(data))
+		}
+	}
+
+	function livemap(gps) {
+		return realTimeMap({lat: gps.lat, long: gps.long})
+	}
+
+	return {
+        get: get,
+        livemap: livemap
+    };
 }
