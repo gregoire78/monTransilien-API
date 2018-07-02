@@ -1,9 +1,10 @@
-const axios = require('axios');
+const Promise = require("bluebird");
+const axios = Promise.promisifyAll(require('axios'));
 const _ = require('lodash');
 const moment = require('moment-timezone');
 const cheerio = require('cheerio');
 const gares = require('./garesNames.json');
-const LiveMap = require('./livemap')().livemap;
+const LiveMap = Promise.promisifyAll(require('./livemap')().livemap);
 
 moment.tz.setDefault("Europe/Paris");
 moment.locale('fr');
