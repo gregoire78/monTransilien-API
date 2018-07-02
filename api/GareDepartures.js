@@ -26,33 +26,59 @@ const getSncfRealTimeApi = (codeTR3A) => {
 	});
 }*/
 
-const getLine = (headsign) => {
-	return axios.get(`https://api.sncf.com/v1/coverage/sncf/lines?headsign=${headsign}&`)
+const getListPassage = (t) => {
+	console.log("https://transilien.mobi/getDetailForTrain?idTrain="+encodeURI(t.trainNumber)+"&theoric="+encodeURI(t.theorique)+"&origine="+t.gareDepart.codeTR3A+"&destination="+t.gareArrivee.codeTR3A+"&now="+encodeURI(t.trainNumber ? true : false))
+	return axios.get("https://transilien.mobi/getDetailForTrain?idTrain="+encodeURI(t.trainNumber)+"&theoric="+encodeURI(t.theorique)+"&origine="+t.gareDepart.codeTR3A+"&destination="+t.gareArrivee.codeTR3A+"&now="+encodeURI(t.trainNumber ? true : false))
 	.then(response => { return response.data })
+	.then(response => {
+		response.listPassage.shift(); // extract first element of the array
+		return response.listPassage.map((list, k) => {
+			return {
+				stop_point : { name : list.gare.name },
+				departure_time : list.time
+			}
+		})
+	});
 }
 
-const getVehiculeJourney = (train) => {
+const getVehiculeJourney = (train, t = null) => {
 	return axios.get(`https://api.sncf.com/v1/coverage/sncf/vehicle_journeys?headsign=${train.number}&since=${moment(train.expectedDepartureTime).format('YYYYMMDD[T000000]')}&until=${moment(train.expectedDepartureTime).format('YYYYMMDD[T235959]')}`, {
 		headers: {
 			'Authorization': SNCFAPI_KEY
 		}
 	})
 	.then(response => { 
-		console.log(`https://api.sncf.com/v1/coverage/sncf/vehicle_journeys?headsign=${train.number}&since=${moment(train.expectedDepartureTime).format('YYYYMMDD[T000000]')}&until=${moment(train.expectedDepartureTime).format('YYYYMMDD[T235959]')}`)		
+		//console.log(`https://api.sncf.com/v1/coverage/sncf/vehicle_journeys?headsign=${train.number}&since=${moment(train.expectedDepartureTime).format('YYYYMMDD[T000000]')}&until=${moment(train.expectedDepartureTime).format('YYYYMMDD[T235959]')}`)		
 		return response.data
 	})
 	.catch(err => {
-		return new Promise(resolve => {
-			console.log(`https://api.sncf.com/v1/coverage/sncf/vehicle_journeys?headsign=${train.number}`)
-			return axios.get(`https://api.sncf.com/v1/coverage/sncf/vehicle_journeys?headsign=${train.number}`, {
+		return new Promise((resolve) => {
+			//console.log(`https://api.sncf.com/v1/coverage/sncf/vehicle_journeys?headsign=${train.number}`)
+			/*return axios.get(`https://api.sncf.com/v1/coverage/sncf/vehicle_journeys?headsign=${train.number}`,{
 				headers: {
 					'Authorization': SNCFAPI_KEY
 				}
 			})
 			.then(response => { resolve(response.data) })
+			.catch(err => {resolve({})})*/
+
+			return getListPassage(t)
+			.then(response => {resolve(response)})
 			.catch(err => {resolve({})})
 		})
 	})
+}
+
+const getRoute = (train) => {
+	return axios.get(`https://api.sncf.com/v1/coverage/sncf/routes?headsign=${train.number}`, {
+		headers: {
+			'Authorization': SNCFAPI_KEY
+		}
+	})
+	.then(response => {
+		return response.data
+	})
+	.catch(err => {console.log('err')})
 }
 
 const getUIC = (tr3a) => {
@@ -94,18 +120,21 @@ const getService = (t, uic, more = null, livemap = null) => {
 		lane: t.trainLane,
 		distance: null,
 		route: {
-			line: null,
-			type: (t.ligne.type == "RER") ? "rer" : 
-			((t.trainNumber >= 110000 && t.trainNumber <= 169999 && t.ligne.type == "TRAIN") ? "transilien" : 
-			(((t.trainNumber >= 830000 || (t.trainNumber >= 16750 && t.trainNumber <= 168749)) && t.ligne.type == "TRAIN") ? "ter" : "TRAIN")),
+			name: null,
+			line: {
+				code: null,
+				color: null,
+				type: (t.ligne.type == "RER") ? "rer" : 
+					((t.trainNumber >= 110000 && t.trainNumber <= 169999 && t.ligne.type == "TRAIN") ? "transilien" : 
+					(((t.trainNumber >= 830000 || (t.trainNumber >= 16750 && t.trainNumber <= 168749)) && t.ligne.type == "TRAIN") ? "ter" : "TRAIN")),
+				name: null
+			}
 		},
 		journey: null,
 		journey_redux: null,
 		journey_text: null,
 		journey_text_html: null
 	}
-	train.route.line = train.route.type !== "ter" ? t.ligne.idLigne : null;
-	train.route = _.pickBy(train.route, _.identity);
 	switch(t.codeMention) {
 		case 'N':
 			train.state = "à l'heure";
@@ -130,38 +159,59 @@ const getService = (t, uic, more = null, livemap = null) => {
 				break;
 		};
 	};
-	return new Promise((resolve, reject) => {
-		getVehiculeJourney(train)
+	//return new Promise((resolve, reject) => {
+		return Promise.all([getVehiculeJourney(train, t), getRoute(train)])
 		.then(result => {
-			if(!_.isEmpty(result)){
-				train.journey = result.vehicle_journeys[0].stop_times;
-				let ok = false;
-				train.journey_redux = _.compact(_.map(train.journey, (o) => { // recevoir seulement la suite
-					if (ok) {
-						return o;
-					}
-					const start = o.stop_point.id.split("-").pop() == uic;
-					if(start) {
-						train.aimedDepartureTime = moment(o.departure_time, 'HHmmss');
-						const late = moment(train.expectedDepartureTime).diff(moment(train.aimedDepartureTime), "m");
-						train.state = (late !== null ? (late !== 0 ? `${(late<0?"":"+") + late} min` : train.state) : null);
-						train.aimedDepartureTime = moment(train.aimedDepartureTime).format('LT');
-					}
-					ok = start;
-				}));
+			
+			//si get vehicule journey
+			if(!_.isEmpty(result[0])){
+				if(result[0].vehicle_journeys){
+					train.journey = result[0].vehicle_journeys[0].stop_times;
+					let ok = false;
+					train.journey_redux = _.compact(_.map(train.journey, (o) => { // recevoir seulement la suite
+						if (ok) {
+							return o;
+						}
+						const start = o.stop_point.id.split("-").pop() == uic;
+						if(start) {
+							train.aimedDepartureTime = moment(o.departure_time, 'HHmmss');
+							const late = moment(train.expectedDepartureTime).diff(moment(train.aimedDepartureTime), "m");
+							train.state = (late !== null ? (late !== 0 ? `${(late<0?"":"+") + late} min` : train.state) : null);
+							train.aimedDepartureTime = moment(train.aimedDepartureTime).format('LT');
+						}
+						ok = start;
+					}));
+				} else {
+					train.journey_redux = result[0]
+				}
+				
 				train.journey_text = train.journey_redux.length == 0 ? "Desserte indisponible" : train.departure == train.terminus ? "terminus" : _.join(_.map(train.journey_redux, (o) => {
-					return o.stop_point.name /*+ " ("+moment(o.departure_time, 'HHmmss').format('HH[h]mm')+")"*/;
+					return o.stop_point.name + " ("+moment(o.departure_time, 'HHmmss').format('HH[h]mm')+")";
 				}), ' • ');
 				train.journey_text_html = _.join(_.map(train.journey_redux, (o) => {
-					return o.stop_point.name /*+ " ("+moment(o.departure_time, 'HHmmss').format('HH[h]mm')+")"*/;
+					return o.stop_point.name + " <small>("+moment(o.departure_time, 'HHmmss').format('HH[h]mm')+")</small>";
 				}), ' <span class="dot-separator">•</span> ');
 			}
+			// si get route
+			if(!_.isEmpty(result[1])){
+				const troute = result[1].routes[0];
+				train.route.name = troute.name;
+				train.route.line.color = troute.line.color;
+				train.route.line.code = troute.line.code;
+				train.route.line.name = troute.line.name;
+			} else {
+				train.route.line.code = train.route.type !== "ter" ? t.ligne.idLigne : null;
+			}
+
 			train.distance = livemap.filter(obj => {return obj.savedNumber == train.number})[0];
 			train.expectedDepartureTime = moment(train.expectedDepartureTime).format('LT');
+			
+			train.route.line = _.pickBy(train.route.line, _.identity);
+			train.route = _.pickBy(train.route, _.identity);
 			return _.pickBy(train, _.identity)
 		})
-		.then(data => resolve(data))
-	})
+		.then(data => {return data})
+	//})
 }
 
 module.exports = Departures = {
@@ -180,9 +230,8 @@ module.exports = Departures = {
 		.then(values => { 
 			liveMap = values[0];
 			moreInfos = values[1]; 
-			return values[2];
-		})
-		.then($ => {
+
+			$ = values[2];
 			// messages traffic
 			//sncfInfos = _.uniqBy(_.map(moreInfos.listeHoraires.horaire, 'circulation.ligne.listeMessagesConjoncturels.messagesConjoncturels'), (e)=>{return e.titre})
 			stationName = $('body').find(".GareDepart > .bluefont").text().trim();
@@ -192,6 +241,7 @@ module.exports = Departures = {
 		.then(data => Promise.all(data.slice(0,7).map(train => getService(train, uic, moreInfos, liveMap))))
 		.then(sncf => res.json({station: {name: stationName, uic: uic, gps: gps}, trains : sncf}))
 		.catch(err => {
+			console.log(err)
 			res.status(404).end("Il n'y a aucun prochains départs en temps réél pour la gare")
 		})
 	}
