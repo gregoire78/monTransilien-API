@@ -1,10 +1,11 @@
 const Promise = require("bluebird");
 const axios = Promise.promisifyAll(require('axios'));
-const _ = require('lodash');
-const moment = require('moment-timezone');
-const cheerio = require('cheerio');
-const gares = require('./garesNames.json');
+const _ = Promise.promisifyAll(require('lodash'));
+const moment = Promise.promisifyAll(require('moment-timezone'));
+const cheerio = Promise.promisifyAll(require('cheerio'));
 const LiveMap = Promise.promisifyAll(require('./livemap')().livemap);
+
+const gares = require('./garesNames.json');
 
 moment.tz.setDefault("Europe/Paris");
 moment.locale('fr');
@@ -43,7 +44,7 @@ const getListPassage = (t) => {
 }
 
 const getVehiculeJourney = (train, t = null) => {
-	return axios.get(`https://api.sncf.com/v1/coverage/sncf/vehicle_journeys?headsign=${train.number}&since=${moment(train.expectedDepartureTime).format('YYYYMMDD[T000000]')}&until=${moment(train.expectedDepartureTime).format('YYYYMMDD[T235959]')}`, {
+	return axios.get(`https://api.sncf.com/v1/coverage/sncf/vehicle_journeys?headsign=${train.number}&since=${moment(train.expectedDepartureTime).format('YYYYMMDD[T000000]')}&until=${moment(train.expectedDepartureTime).format('YYYYMMDD[T235959]')}&disable_geojson=true`, {
 		headers: {
 			'Authorization': SNCFAPI_KEY
 		}
@@ -71,7 +72,7 @@ const getVehiculeJourney = (train, t = null) => {
 }
 
 const getRoute = (train) => {
-	return axios.get(`https://api.sncf.com/v1/coverage/sncf/routes?headsign=${train.number}`, {
+	return axios.get(`https://api.sncf.com/v1/coverage/sncf/routes?headsign=${train.number}&disable_geojson=true`, {
 		headers: {
 			'Authorization': SNCFAPI_KEY
 		}
@@ -79,7 +80,7 @@ const getRoute = (train) => {
 	.then(response => {
 		return response.data
 	})
-	.catch(err => {console.log('err')})
+	.catch(err => {console.log('⚠ get route '+train.number)})
 }
 
 const getUIC = (tr3a) => {
@@ -146,6 +147,9 @@ const getService = (t, uic, more = null, livemap = null) => {
 		case 'T':
 			train.state = "retardé";
 			break;
+		case null:
+			train.state = null;
+			break;
 		default:
 			train.state = "à l'heure";
 			break;
@@ -163,7 +167,7 @@ const getService = (t, uic, more = null, livemap = null) => {
 	//return new Promise((resolve, reject) => {
 		return Promise.all([getVehiculeJourney(train, t), getRoute(train)])
 		.then(result => {
-			
+			let late = 0;
 			//si get vehicule journey
 			if(!_.isEmpty(result[0])){
 				if(result[0].vehicle_journeys){
@@ -175,8 +179,14 @@ const getService = (t, uic, more = null, livemap = null) => {
 						}
 						const start = o.stop_point.id.split("-").pop() == uic;
 						if(start) {
-							train.aimedDepartureTime = moment(o.departure_time, 'HHmmss');
-							const late = moment(train.expectedDepartureTime).diff(moment(train.aimedDepartureTime), "m");
+							// verifications horaires chevauchement entre deux jours
+							if (moment(o.departure_time, 'HHmmss').diff(moment(train.expectedDepartureTime), 'd') > 0 || moment(train.expectedDepartureTime) > moment().endOf('day')) {
+								train.aimedDepartureTime = moment(o.departure_time, 'HHmmss').add(1, 'd');
+							} else {
+								train.aimedDepartureTime = moment(o.departure_time, 'HHmmss');
+							}
+							// les minutes de retards ☢⚠ très important ⚠☢
+							late = moment(train.expectedDepartureTime).diff(moment(train.aimedDepartureTime), "m");
 							train.state = (late !== null ? (late !== 0 ? `${(late<0?"":"+") + late} min` : train.state) : null);
 							train.aimedDepartureTime = moment(train.aimedDepartureTime).format('LT');
 						}
@@ -187,10 +197,10 @@ const getService = (t, uic, more = null, livemap = null) => {
 				}
 				
 				train.journey_text = train.journey_redux.length == 0 ? "Desserte indisponible" : train.departure == train.terminus ? "terminus" : _.join(_.map(train.journey_redux, (o) => {
-					return o.stop_point.name + " ("+moment(o.departure_time, 'HHmmss').format('HH[h]mm')+")";
+					return o.stop_point.name + (o.departure_time != "*" ? " (" +moment(o.departure_time, 'HHmmss').add(late, 'm').format('HH[h]mm') + ")" : '');
 				}), ' • ');
 				train.journey_text_html = _.join(_.map(train.journey_redux, (o) => {
-					return o.stop_point.name + " <small>("+moment(o.departure_time, 'HHmmss').format('HH[h]mm')+")</small>";
+					return o.stop_point.name + (o.departure_time != "*" ? " <small>("+moment(o.departure_time, 'HHmmss').add(late, 'm').format('HH[h]mm')+")</small>" : '');
 				}), ' <span class="dot-separator">•</span> ');
 			}
 			// si get route
@@ -198,7 +208,7 @@ const getService = (t, uic, more = null, livemap = null) => {
 				const troute = result[1].routes[0];
 				train.route.name = troute.name;
 				train.route.line.color = troute.line.color;
-				train.route.line.code = troute.line.code;
+				train.route.line.code = troute.line.code ? troute.line.code : SncfMore.circulation.ligne.libelleNumero;
 				train.route.line.name = troute.line.name;
 			} else {
 				train.route.line.code = train.route.type !== "ter" ? t.ligne.idLigne : null;
@@ -226,16 +236,16 @@ module.exports = Departures = {
 		});
 
 		getUIC(tr3a)
-		.then(d => {uic = d.code_uic, gps = {lat: d.coord_gps_wgs84[0], long: d.coord_gps_wgs84[1]}})
+		.then(d => {stationName = d.nom_gare, uic = d.code_uic, gps = {lat: d.coord_gps_wgs84[0], long: d.coord_gps_wgs84[1]}})
 		.then(() => Promise.all([LiveMap(gps), getMoreInformations(uic), getPassageAPI]))
-		.then(values => { 
+		.then(values => {
 			liveMap = values[0];
 			moreInfos = values[1]; 
 
 			$ = values[2];
 			// messages traffic
 			//sncfInfos = _.uniqBy(_.map(moreInfos.listeHoraires.horaire, 'circulation.ligne.listeMessagesConjoncturels.messagesConjoncturels'), (e)=>{return e.titre})
-			stationName = $('body').find(".GareDepart > .bluefont").text().trim();
+			//stationName = $('body').find(".GareDepart > .bluefont").text().trim();
 			//console.log(uic = /'&departureCodeUIC8=(\d{8})'/gm.exec($('script[type="text/javascript"]').get()[7].children[0].data)[1])
 			return JSON.parse($('body').find("#infos").val())
 		})
