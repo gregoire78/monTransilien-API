@@ -33,6 +33,11 @@ const getRATPMission = (train) => {
 	.then(response => { return response.data })
 }
 
+const getTraficObject = () => {
+	return axios.get(`https://www.sncf.com/api/iv/1.0/avance/rechercherPrevisions?format=html`)
+	.then(response => { return response.data.reponseRechercherPrevisions.reponse.listeResultats.resultat[0].donnees.listeInformations.information })
+}
+
 const getListPassage = (t) => {
 	return axios.get("https://transilien.mobi/getDetailForTrain?idTrain="+encodeURI(t.trainNumber)+"&theoric="+encodeURI(t.theorique)+"&origine="+t.gareDepart.codeTR3A+"&destination="+t.gareArrivee.codeTR3A+"&now="+encodeURI(t.trainNumber ? true : false))
 	.then(response => { return response.data })
@@ -283,7 +288,7 @@ module.exports = Departures = {
 		})
 	},
 
-	station: (req, res, next) => {
+	getStation: (req, res, next) => {
 		const tr3a = req.params.tr3a;
 		getUIC(tr3a)
 		.then(d => {
@@ -295,5 +300,29 @@ module.exports = Departures = {
 			}
 		})
 		.then(json => res.json(json))
+	},
+
+	getTrafic: (req, res, next) => {
+		const objTrafic = getTraficObject();
+		if(req.params.line) {
+			const line = req.params.line;
+			objTrafic.then(response => {
+				return response.filter(obj => {
+					if(obj.ligne)
+						return obj.ligne.libelleNumero == line && moment(obj.dateHeureFin) >= moment() && moment(obj.dateHeureDebut) <= moment()
+					else return false
+				})
+			})
+			.then(json => res.json(json))
+		} else {
+			objTrafic
+			.then(response => {
+				return response.filter(obj => {
+					if(obj.ligne)
+						return moment(obj.dateHeureFin) >= moment() && moment(obj.dateHeureDebut) <= moment()
+					else return false
+				})
+			}).then(json => res.json(json))
+		}
 	}
 }
