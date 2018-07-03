@@ -1,5 +1,6 @@
-const axios = require('axios');
-const moment = require('moment-timezone');
+const Promise = require("bluebird");
+const axios = Promise.promisifyAll(require('axios'));
+const moment = Promise.promisifyAll(require('moment-timezone'));
 
 moment.tz.setDefault("Europe/Paris");
 moment.locale('fr');

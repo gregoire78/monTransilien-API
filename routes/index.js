@@ -8,7 +8,10 @@ var live = require('../api/livemap')();
 
 router.get('/', Trains.get);
 router.get('/mobi', TrainsMobi.get);
+
 router.get('/departures', TrainsDepartures.get);
+router.get('/station/:tr3a', TrainsDepartures.station);
+
 router.get('/live/:filter?', live.get);
 
 module.exports = router;

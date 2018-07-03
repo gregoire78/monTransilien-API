@@ -230,17 +230,23 @@ const getService = (t, uic, more = null, livemap = null) => {
 
 module.exports = Departures = {
 	get : (req, res, next) => {
-		const tr3a = req.query.uic;
-		let uic,gps, moreInfos, sncfInfos, stationName, liveMap;
+		const tr3a = req.query.tr3a;
+		const uic = req.query.uic;
+		const gps = {
+			lat: req.query.lat,
+			long: req.query.long
+		}
+		let liveMap;
 		
 		const getPassageAPI = getSNCFRealTimeApi(tr3a).then(response => {
 			const $ = cheerio.load(response.data);
 			return $;
 		});
 
-		getUIC(tr3a)
+		/*getUIC(tr3a)
 		.then(d => {stationName = d.nom_gare, uic = d.code_uic, gps = {lat: d.coord_gps_wgs84[0], long: d.coord_gps_wgs84[1]}})
-		.then(() => Promise.all([LiveMap(gps), getMoreInformations(uic), getPassageAPI]))
+		.then(() => Promise.all([LiveMap(gps), getMoreInformations(uic), getPassageAPI]))*/
+		Promise.all([LiveMap(gps), getMoreInformations(uic), getPassageAPI])
 		.then(values => {
 			liveMap = values[0];
 			moreInfos = values[1]; 
@@ -253,10 +259,24 @@ module.exports = Departures = {
 			return JSON.parse($('body').find("#infos").val())
 		})
 		.then(data => Promise.all(data.slice(0,7).map(train => getService(train, uic, moreInfos, liveMap))))
-		.then(sncf => res.json({station: {name: stationName, uic: uic, gps: gps}, trains : sncf}))
+		.then(sncf => res.json(sncf))
 		.catch(err => {
-			console.log(err)
+			console.log(err.response)
 			res.status(404).end("Il n'y a aucun prochains départs en temps réél pour la gare")
 		})
+	},
+
+	station: (req, res, next) => {
+		const tr3a = req.params.tr3a;
+		getUIC(tr3a)
+		.then(d => {
+			return {
+				name : d.nom_gare,
+				uic : d.code_uic,
+				tr3a : tr3a,
+				gps : {lat: d.coord_gps_wgs84[0], long: d.coord_gps_wgs84[1]}
+			}
+		})
+		.then(json => res.json(json))
 	}
 }
