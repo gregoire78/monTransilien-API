@@ -12,10 +12,10 @@ moment.locale('fr');
 
 require('./const');
 
-const getSncfRealTimeApi = (codeTR3A) => {
+const getSNCFRealTimeApi = (codeTR3A) => {
 	return axios.get(`https://transilien.mobi/train/result?idOrigin=${codeTR3A}&idDest=`);
 }
-/*const getSncfRealTimeApi = (uic) => {
+/*const getSNCFRealTimeApi = (uic) => {
 	return axios.get(`http://api.transilien.com/gare/${uic}/depart/`, {
 		auth: {
 			username: SNCFAPI_USERNAME,
@@ -27,9 +27,12 @@ const getSncfRealTimeApi = (codeTR3A) => {
 		responseType: 'text'
 	});
 }*/
+const getRATPMission = (train) => {
+	return axios.get(`https://api-ratp.pierre-grimaud.fr/v3/mission/rers/${train.route.line.code}/${train.name}?_format=json`)
+	.then(response => { return response.data })
+}
 
 const getListPassage = (t) => {
-	console.log("https://transilien.mobi/getDetailForTrain?idTrain="+encodeURI(t.trainNumber)+"&theoric="+encodeURI(t.theorique)+"&origine="+t.gareDepart.codeTR3A+"&destination="+t.gareArrivee.codeTR3A+"&now="+encodeURI(t.trainNumber ? true : false))
 	return axios.get("https://transilien.mobi/getDetailForTrain?idTrain="+encodeURI(t.trainNumber)+"&theoric="+encodeURI(t.theorique)+"&origine="+t.gareDepart.codeTR3A+"&destination="+t.gareArrivee.codeTR3A+"&now="+encodeURI(t.trainNumber ? true : false))
 	.then(response => { return response.data })
 	.then(response => {
@@ -63,7 +66,7 @@ const getVehiculeJourney = (train, t = null) => {
 			})
 			.then(response => { resolve(response.data) })
 			.catch(err => {resolve({})})*/
-
+			console.log('⚠ get vehiclejourney  '+train.number)
 			return getListPassage(t)
 			.then(response => {resolve(response)})
 			.catch(err => {resolve({})})
@@ -226,11 +229,11 @@ const getService = (t, uic, more = null, livemap = null) => {
 }
 
 module.exports = Departures = {
-	get : (req, res, next) =>  {
+	get : (req, res, next) => {
 		const tr3a = req.query.uic;
 		let uic,gps, moreInfos, sncfInfos, stationName, liveMap;
 		
-		const getPassageAPI = getSncfRealTimeApi(tr3a).then(response => {
+		const getPassageAPI = getSNCFRealTimeApi(tr3a).then(response => {
 			const $ = cheerio.load(response.data);
 			return $;
 		});
