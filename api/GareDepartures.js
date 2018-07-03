@@ -15,7 +15,7 @@ require('./const');
 const getSNCFRealTimeApi = (codeTR3A) => {
 	return axios.get(`https://transilien.mobi/train/result?idOrigin=${codeTR3A}&idDest=`);
 }
-/*const getSNCFRealTimeApi = (uic) => {
+const getSncfRealTimeApi = (uic) => {
 	return axios.get(`http://api.transilien.com/gare/${uic}/depart/`, {
 		auth: {
 			username: SNCFAPI_USERNAME,
@@ -26,7 +26,8 @@ const getSNCFRealTimeApi = (codeTR3A) => {
 		},
 		responseType: 'text'
 	});
-}*/
+}
+
 const getRATPMission = (train) => {
 	return axios.get(`https://api-ratp.pierre-grimaud.fr/v3/mission/rers/${train.route.line.code}/${train.name}?_format=json`)
 	.then(response => { return response.data })
@@ -241,7 +242,7 @@ module.exports = Departures = {
 		const getPassageAPI = getSNCFRealTimeApi(tr3a).then(response => {
 			const $ = cheerio.load(response.data);
 			return $;
-		});
+		}); 
 
 		/*getUIC(tr3a)
 		.then(d => {stationName = d.nom_gare, uic = d.code_uic, gps = {lat: d.coord_gps_wgs84[0], long: d.coord_gps_wgs84[1]}})
@@ -256,12 +257,28 @@ module.exports = Departures = {
 			//sncfInfos = _.uniqBy(_.map(moreInfos.listeHoraires.horaire, 'circulation.ligne.listeMessagesConjoncturels.messagesConjoncturels'), (e)=>{return e.titre})
 			//stationName = $('body').find(".GareDepart > .bluefont").text().trim();
 			//console.log(uic = /'&departureCodeUIC8=(\d{8})'/gm.exec($('script[type="text/javascript"]').get()[7].children[0].data)[1])
-			return JSON.parse($('body').find("#infos").val())
+			const infos = $('body').find("#infos").val()
+			if(infos){
+				return JSON.parse(infos)
+			} else {
+				return new Promise((resolve, reject) => {
+					getSncfRealTimeApi(uic).then(response => {
+						const parseString = Promise.promisifyAll(require('xml2js')).parseString;
+						let sncfPassages;
+						parseString(response.data, function (err, result) {
+							sncfPassages = result.passages;
+						});
+						/*sncfPassages.train.term = _.result(_.find(gares, function (obj) {
+							return obj.uic7 === parseInt(sncfPassages.term[0].slice(0, -1));
+						}), 'nom_gare_sncf');*/
+						resolve(sncfPassages.train);
+					})
+				});
+			}
 		})
 		.then(data => Promise.all(data.slice(0,7).map(train => getService(train, uic, moreInfos, liveMap))))
 		.then(sncf => res.json(sncf))
 		.catch(err => {
-			console.log(err.response)
 			res.status(404).end("Il n'y a aucun prochains départs en temps réél pour la gare")
 		})
 	},
