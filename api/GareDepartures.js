@@ -2,6 +2,7 @@ const Promise = require("bluebird");
 const axios = Promise.promisifyAll(require('axios'));
 const _ = Promise.promisifyAll(require('lodash'));
 const moment = Promise.promisifyAll(require('moment-timezone'));
+const NodeCache = Promise.promisifyAll(require('node-cache'));
 const cheerio = Promise.promisifyAll(require('cheerio'));
 const LiveMap = Promise.promisifyAll(require('./livemap')().livemap);
 
@@ -9,6 +10,7 @@ const gares = require('./garesNames.json');
 
 moment.tz.setDefault("Europe/Paris");
 moment.locale('fr');
+const myCache = new NodeCache();
 
 require('./const');
 
@@ -264,21 +266,23 @@ module.exports = Departures = {
 			//console.log(uic = /'&departureCodeUIC8=(\d{8})'/gm.exec($('script[type="text/javascript"]').get()[7].children[0].data)[1])
 			const infos = $('body').find("#infos").val()
 			if(infos){
-				return JSON.parse(infos)
+				myCache.set(uic, JSON.parse(infos), 1800)
+				return JSON.parse(infos);
 			} else {
-				return new Promise((resolve, reject) => {
-					getSncfRealTimeApi(uic).then(response => {
-						const parseString = Promise.promisifyAll(require('xml2js')).parseString;
-						let sncfPassages;
-						parseString(response.data, function (err, result) {
-							sncfPassages = result.passages;
-						});
-						/*sncfPassages.train.term = _.result(_.find(gares, function (obj) {
-							return obj.uic7 === parseInt(sncfPassages.term[0].slice(0, -1));
-						}), 'nom_gare_sncf');*/
-						resolve(sncfPassages.train);
-					})
-				});
+				return myCache.get(uic);
+				//return new Promise((resolve, reject) => {
+				//	getSncfRealTimeApi(uic).then(response => {
+				//		const parseString = Promise.promisifyAll(require('xml2js')).parseString;
+				//		let sncfPassages;
+				//		parseString(response.data, function (err, result) {
+				//			sncfPassages = result.passages;
+				//		});
+				//		/*sncfPassages.train.term = _.result(_.find(gares, function (obj) {
+				//			return obj.uic7 === parseInt(sncfPassages.term[0].slice(0, -1));
+				//		}), 'nom_gare_sncf');*/
+				//		resolve(sncfPassages.train);
+				//	})
+				//});
 			}
 		})
 		.then(data => Promise.all(data.slice(0,7).map(train => getService(train, uic, moreInfos, liveMap))))
@@ -304,12 +308,22 @@ module.exports = Departures = {
 
 	getTrafic: (req, res, next) => {
 		const objTrafic = getTraficObject();
+		const type = req.query.type;
 		if(req.params.line) {
 			const line = req.params.line;
-			objTrafic.then(response => {
+			objTrafic
+			.then(response => {
 				return response.filter(obj => {
-					if(obj.ligne)
-						return obj.ligne.libelleNumero == line && moment(obj.dateHeureFin) >= moment() && moment(obj.dateHeureDebut) <= moment()
+					if(obj.ligne) {
+						const now = moment().format('YYYY-MM-DDTHH:mm:ss');
+						const debut = moment.utc(obj.dateHeureDebut).format('YYYY-MM-DDTHH:mm:ss');
+						const fin = moment.utc(obj.dateHeureFin).format('YYYY-MM-DDTHH:mm:ss');
+						if(type) {
+							return obj.ligne.libelleNumero == line && fin >= now && debut <= now && obj.typeMessage == type
+						} else {
+							return obj.ligne.libelleNumero == line && fin >= now && debut <= now
+						}
+					}
 					else return false
 				})
 			})
@@ -318,11 +332,20 @@ module.exports = Departures = {
 			objTrafic
 			.then(response => {
 				return response.filter(obj => {
-					if(obj.ligne)
-						return moment(obj.dateHeureFin) >= moment() && moment(obj.dateHeureDebut) <= moment()
+					if(obj.ligne) {
+						const now = moment().format('YYYY-MM-DDTHH:mm:ss');
+						const debut = moment.utc(obj.dateHeureDebut).format('YYYY-MM-DDTHH:mm:ss');
+						const fin = moment.utc(obj.dateHeureFin).format('YYYY-MM-DDTHH:mm:ss');
+						if(type) {
+							return fin >= now && debut <= now && obj.typeMessage == type
+						} else {
+							return fin >= now && debut <= now
+						}
+					}
 					else return false
 				})
-			}).then(json => res.json(json))
+			})
+			.then(json => res.json(json))
 		}
 	}
 }
