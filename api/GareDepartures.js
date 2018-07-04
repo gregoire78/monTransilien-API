@@ -35,6 +35,14 @@ const getRATPMission = (train) => {
 	.then(response => { return response.data })
 }
 
+const getStationLines = (codeTR3A) => {
+	return axios.get(`https://transilien.mobi/gare/detail?id=${codeTR3A}`)
+	.then(response => {
+		const $ = cheerio.load(response.data);
+		return $;
+	}); 
+}
+
 const getTraficObject = () => {
 	return axios.get(`https://www.sncf.com/api/iv/1.0/avance/rechercherPrevisions?format=html`)
 	.then(response => { return response.data.reponseRechercherPrevisions.reponse.listeResultats.resultat[0].donnees.listeInformations.information })
@@ -91,7 +99,7 @@ const getRoute = (train) => {
 	.then(response => {
 		return response.data
 	})
-	.catch(err => {console.log('⚠ get route '+train.number)})
+	.catch(err => {console.log('⚠ get route           '+train.number)})
 }
 
 const getUIC = (tr3a) => {
@@ -294,8 +302,10 @@ module.exports = Departures = {
 
 	getStation: (req, res, next) => {
 		const tr3a = req.params.tr3a;
-		getUIC(tr3a)
-		.then(d => {
+		Promise.all([getUIC(tr3a), getStationLines(tr3a)])
+		.then(data => {
+			const d = data[0];
+			const $ = data[1];
 			return {
 				name : d.nom_gare,
 				uic : d.code_uic,
