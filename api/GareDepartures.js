@@ -6,7 +6,7 @@ const NodeCache = Promise.promisifyAll(require('node-cache'));
 const cheerio = Promise.promisifyAll(require('cheerio'));
 const LiveMap = Promise.promisifyAll(require('./livemap')().livemap);
 
-const gares = require('./gares.json');
+const gares = require('./garesNames.json');
 const lignes = require('./lignes.json');
 
 moment.tz.setDefault("Europe/Paris");
@@ -96,7 +96,7 @@ const getVehiculeJourney = (train, t = null) => {
 			})
 			.then(response => { resolve(response.data) })
 			.catch(err => {resolve({})})*/
-			console.log('⚠ get vehiclejourney  '+train.number)
+			//console.log('⚠ get vehiclejourney  '+train.number)
 			return getListPassage(t)
 			.then(response => {resolve(response)})
 			.catch(err => {resolve({})})
@@ -113,7 +113,7 @@ const getRoute = (train) => {
 	.then(response => {
 		return response.data
 	})
-	.catch(err => {console.log('⚠ get route           '+train.number)})
+	.catch(err => {/*console.log('⚠ get route           '+train.number)*/})
 }
 
 const getUIC = (tr3a) => {
@@ -159,9 +159,7 @@ const getService = (t, uic, more = null, livemap = null) => {
 			line: {
 				code: null,
 				color: null,
-				type: (t.ligne.type == "RER") ? "rer" : 
-					((t.trainNumber >= 110000 && t.trainNumber <= 169999 && t.ligne.type == "TRAIN") ? "transilien" : 
-					(((t.trainNumber >= 830000 || (t.trainNumber >= 16750 && t.trainNumber <= 168749)) && t.ligne.type == "TRAIN") ? "ter" : "TRAIN")),
+				type: null,
 				name: null
 			}
 		},
@@ -196,10 +194,31 @@ const getService = (t, uic, more = null, livemap = null) => {
 				train.nature = "court";
 				break;
 		};
-	};
+		if(t.ligne.type == "RER") train.route.line.type = 'rer';
+		else {
+			switch(SncfMore.circulation.mode.typeCode) {
+				case 'TRAIN_TER':
+					train.route.line.type = 'ter';
+					break;
+				case 'TRANSILIEN':
+					train.route.line.type = 'transilien';
+					break;
+				case 'INTERCITES':
+					train.route.line.type = 'intercites';
+					break;
+				default:
+					train.route.line.type = "";
+					break;
+			};
+		}
+	} else {
+		train.route.line.type = (t.ligne.type == "RER") ? "rer" : 
+								((t.trainNumber >= 110000 && t.trainNumber <= 169999 && t.ligne.type == "TRAIN") ? "transilien" : 
+								(((t.trainNumber >= 830000 || (t.trainNumber >= 16750 && t.trainNumber <= 168749)) && t.ligne.type == "TRAIN") ? "ter" : "TRAIN"))
+	}
 	//return new Promise((resolve, reject) => {
 		return Promise.all([getVehiculeJourney(train, t), getRoute(train)])
-		.then(result => {
+		.then(result => {	
 			let late = 0;
 			//si get vehicule journey
 			if(!_.isEmpty(result[0])){
@@ -229,7 +248,7 @@ const getService = (t, uic, more = null, livemap = null) => {
 					train.journey_redux = result[0]
 				}
 				
-				train.journey_text = train.journey_redux.length == 0 ? "Desserte indisponible" : train.departure == train.terminus ? "terminus" : _.join(_.map(train.journey_redux, (o) => {
+				train.journey_text = train.journey_redux.length == 0 ? (train.departure == train.terminus ? "terminus" : "Desserte indisponible") : _.join(_.map(train.journey_redux, (o) => {
 					return o.stop_point.name + (o.departure_time != "*" ? " (" +moment(o.departure_time, 'HHmmss').add(late, 'm').format('HH[h]mm') + ")" : '');
 				}), ' • ');
 				train.journey_text_html = _.join(_.map(train.journey_redux, (o) => {
@@ -241,7 +260,7 @@ const getService = (t, uic, more = null, livemap = null) => {
 				const troute = result[1].routes[0];
 				train.route.name = troute.name;
 				train.route.line.color = troute.line.color;
-				train.route.line.code = troute.line.code ? troute.line.code : SncfMore.circulation.ligne.libelleNumero;
+				train.route.line.code = troute.line.code ? troute.line.code : SncfMore.circulation.ligne ? SncfMore.circulation.ligne.libelleNumero: '';
 				train.route.line.name = troute.line.name;
 			} else {
 				train.route.line.code = train.route.type !== "ter" ? t.ligne.idLigne : null;
@@ -255,6 +274,7 @@ const getService = (t, uic, more = null, livemap = null) => {
 			return _.pickBy(train, _.identity)
 		})
 		.then(data => {return data})
+		.catch(err => {})
 	//})
 }
 
@@ -307,7 +327,7 @@ module.exports = Departures = {
 				//});
 			}
 		})
-		.then(data => Promise.all(data.slice(0,7).map(train => getService(train, uic, moreInfos, liveMap))))
+		.then(data => Promise.all(data.slice(0,6).map(train => getService(train, uic, moreInfos, liveMap))))
 		.then(sncf => res.json(sncf))
 		.catch(err => {
 			res.status(404).end("Il n'y a aucun prochains départs en temps réél pour la gare")
@@ -329,6 +349,9 @@ module.exports = Departures = {
 			}
 		})
 		.then(json => res.json(json))
+		.catch(err => {
+			res.status(404).end("Gare non trouve")
+		})
 	},
 
 	getTrafic: (req, res, next) => {

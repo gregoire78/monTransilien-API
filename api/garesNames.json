@@ -670,13 +670,8 @@
 		"nom_gare_sncf": "Ermont Halte"
 	},
 	{
-		"code": "ERT",
-		"uic7": 8727605,
-		"nom_gare_sncf": "Ermont Eaubonne"
-	},
-	{
 		"code": "ERE",
-		"uic7": 8753413,
+		"uic7": 8727605,
 		"nom_gare_sncf": "Ermont Eaubonne"
 	},
 	{
@@ -1431,7 +1426,7 @@
 	},
 	{
 		"code": "MVP",
-		"uic7": 8775878,
+		"uic7": 8738328,
 		"nom_gare_sncf": "Massy Verrières RER B"
 	},
 	{
@@ -2206,7 +2201,7 @@
 	},
 	{
 		"code": "VFR",
-		"uic7": 8775830,
+		"uic7": 8711371,
 		"nom_gare_sncf": "Val de Fontenay RER A"
 	},
 	{
