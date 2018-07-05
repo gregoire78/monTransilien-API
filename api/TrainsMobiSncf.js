@@ -1,9 +1,11 @@
-const gtfs = require('gtfs');
-const mongoose = require('mongoose');
-const _ = require('lodash');
-const axios = require('axios');
-const moment = require('moment-timezone');
-const cheerio = require('cheerio');
+const Promise = require("bluebird");
+const gtfs = Promise.promisifyAll(require('gtfs'));
+const mongoose = Promise.promisifyAll(require('mongoose'));
+const _ = Promise.promisifyAll(require('lodash'));
+const axios = Promise.promisifyAll(require('axios'));
+const moment = Promise.promisifyAll(require('moment-timezone'));
+const cheerio = Promise.promisifyAll(require('cheerio'));
+const NodeCache = Promise.promisifyAll(require('node-cache'));
 
 const gares = require('./gares.json');
 
@@ -11,6 +13,7 @@ moment.tz.setDefault("Europe/Paris");
 moment.locale('fr');
 require('./const');
 mongoose.connect(`mongodb://${MONGO_USERNAME}:${MONGO_PWD}@${MONGO_IP}/gtfs?authSource=admin`);
+const myCache = new NodeCache();
 
 function getSncfRealTimeApi(codeTR3A) {
 	return axios.get(`https://transilien.mobi/train/result?idOrigin=${codeTR3A}&idDest=`);
@@ -340,7 +343,18 @@ module.exports = Trains = {
 		getPassageAPI
 		.then($ => { // filtrage des trains autre que rer ou transilien et certains ter (pour paris montparnasse par exemple)
 			stationName = $('body').find(".GareDepart > .bluefont").text().trim();
-			return _.filter(JSON.parse($('body').find("#infos").val()), function(t) {
+			const infos = $('body').find("#infos").val();
+			// mise en cache si probleme
+			if(infos){
+				myCache.set(idStation+"01", JSON.parse(infos), 3600)
+				return JSON.parse(infos);
+			} else {
+				return myCache.get(idStation+"01");
+			}
+		})
+		.then(infos => {
+			console.log(myCache.get(idStation+"01"))
+			return _.filter(infos, function(t) {
 				return (t.trainNumber >= 110000 && t.trainNumber <= 169999) || t.trainNumber >= 830000 || (t.trainNumber >= 16750 && t.trainNumber <= 168749) || t.ligne.type == "RER"; 
 			});
 		})
