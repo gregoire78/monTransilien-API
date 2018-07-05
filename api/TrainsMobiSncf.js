@@ -353,7 +353,6 @@ module.exports = Trains = {
 			}
 		})
 		.then(infos => {
-			console.log(myCache.get(idStation+"01"))
 			return _.filter(infos, function(t) {
 				return (t.trainNumber >= 110000 && t.trainNumber <= 169999) || t.trainNumber >= 830000 || (t.trainNumber >= 16750 && t.trainNumber <= 168749) || t.ligne.type == "RER"; 
 			});
