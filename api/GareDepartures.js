@@ -6,7 +6,8 @@ const NodeCache = Promise.promisifyAll(require('node-cache'));
 const cheerio = Promise.promisifyAll(require('cheerio'));
 const LiveMap = Promise.promisifyAll(require('./livemap')().livemap);
 
-const gares = require('./garesNames.json');
+const gares = require('./gares.json');
+const lignes = require('./lignes.json');
 
 moment.tz.setDefault("Europe/Paris");
 moment.locale('fr');
@@ -40,7 +41,20 @@ const getStationLines = (codeTR3A) => {
 	.then(response => {
 		const $ = cheerio.load(response.data);
 		return $;
-	}); 
+	})
+	.then($ => {
+		const lines = [];
+		$('body').find("img[linename]")
+		.each(function (i, elem) {
+			lines.push($(this).attr('linename'));
+		});
+		if($('body').find("img[linename]").length <= 0){
+			const uic = _.result(_.find(gares, (obj) => {
+				return obj.code === codeTR3A;
+			}), 'uic7');
+			return _.filter(lignes, {"uic": uic}).map(values => {return values.line})
+		} else return lines;
+	});
 }
 
 const getTraficObject = () => {
@@ -305,11 +319,12 @@ module.exports = Departures = {
 		Promise.all([getUIC(tr3a), getStationLines(tr3a)])
 		.then(data => {
 			const d = data[0];
-			const $ = data[1];
+			const lines = data[1];
 			return {
 				name : d.nom_gare,
 				uic : d.code_uic,
 				tr3a : tr3a,
+				lines: lines,
 				gps : {lat: d.coord_gps_wgs84[0], long: d.coord_gps_wgs84[1]}
 			}
 		})
