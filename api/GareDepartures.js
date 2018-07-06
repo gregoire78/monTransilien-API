@@ -301,7 +301,7 @@ module.exports = Departures = {
 			lat: req.query.lat,
 			long: req.query.long
 		}
-		let liveMap;
+		let liveMap, moreInfos, $;
 		
 		const getPassageAPI = getSNCFRealTimeApi(tr3a).then(response => {
 			const $ = cheerio.load(response.data);
@@ -315,7 +315,6 @@ module.exports = Departures = {
 		.then(values => {
 			liveMap = values[0];
 			moreInfos = values[1]; 
-
 			$ = values[2];
 			// messages traffic
 			//sncfInfos = _.uniqBy(_.map(moreInfos.listeHoraires.horaire, 'circulation.ligne.listeMessagesConjoncturels.messagesConjoncturels'), (e)=>{return e.titre})
