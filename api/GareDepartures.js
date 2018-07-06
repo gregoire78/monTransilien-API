@@ -244,7 +244,8 @@ const getService = (t, uic, more = null, livemap = null) => {
 						if (ok) {
 							return o;
 						}
-						const start = o.stop_point.id.split("-").pop() == uic;
+						const ouic = o.stop_point.id.split("-").pop();
+						const start = (ouic == uic || (ouic == '87391102' && uic == '87391003'));
 						if(start) {
 							// verifications horaires chevauchement entre deux jours
 							if (moment(o.departure_time, 'HHmmss').diff(moment(train.expectedDepartureTime), 'd') > 0 || moment(train.expectedDepartureTime) > moment().endOf('day')) {
