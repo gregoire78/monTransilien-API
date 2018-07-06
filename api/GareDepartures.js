@@ -330,9 +330,18 @@ module.exports = Departures = {
 		.then(data => Promise.all(data.slice(0,6).map(train => getService(train, uic, moreInfos, liveMap))))
 		.then(sncf => res.json(sncf))
 		.catch(err => {
-			const fs = require('fs');
-			fs.appendFile('log.txt', '⚠ = '+moment().format()+'\n-----------------\n'+err+'\n-----------------\n\n', function (err) {
-			if (err) throw err;
+			const fs = Promise.promisifyAll(require('fs'));
+			fs.appendFile('log.txt',
+			'••••••••••••••••••••••••••••••••••••\n'
+			+moment().format()
+			+'\n-----------------\n'
+			+'status : '+JSON.stringify(err.response.status)+' => '+JSON.stringify(err.response.statusText)+'\n'
+			+'config : '+JSON.stringify(err.response.config)+'\n'
+			+'data   : '+JSON.stringify(err.response.data)
+			+'\n-----------------\n'
+			+'••••••••••••••••••••••••••••••••••••\n\n',
+			function (err) {
+				if (err) throw err;
 				res.status(404).end("Il n'y a aucun prochains départs en temps réél pour la gare")
 			});
 		})
