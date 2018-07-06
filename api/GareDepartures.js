@@ -268,7 +268,7 @@ const getService = (t, uic, more = null, livemap = null) => {
 					return o.stop_point.name + (o.departure_time != "*" ? " (" +moment(o.departure_time, 'HHmmss').add(late, 'm').format('HH[h]mm') + ")" : '');
 				}), ' • ');
 				train.journey_text_html = _.join(_.map(train.journey_redux, (o) => {
-					return o.stop_point.name + (o.departure_time != "*" ? " <small>("+moment(o.departure_time, 'HHmmss').add(late, 'm').format('HH[h]mm')+")</small>" : '');
+					return o.stop_point.name + (o.departure_time != "*" ? "<small> "+moment(o.departure_time, 'HHmmss').add(late, 'm').format('HH[:]mm')+"</small>" : '');
 				}), ' <span class="dot-separator">•</span> ');
 			}
 			// si get route
