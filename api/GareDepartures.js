@@ -2,16 +2,17 @@ const Promise = require("bluebird");
 const axios = Promise.promisifyAll(require('axios'));
 const _ = Promise.promisifyAll(require('lodash'));
 const moment = Promise.promisifyAll(require('moment-timezone'));
-const NodeCache = Promise.promisifyAll(require('node-cache'));
+const storage = Promise.promisifyAll(require('node-persist'));
 const cheerio = Promise.promisifyAll(require('cheerio'));
 const LiveMap = Promise.promisifyAll(require('./livemap')().livemap);
+const fs = Promise.promisifyAll(require('fs'));
 
 const gares = require('./garesNames.json');
 const lignes = require('./lignes.json');
 
 moment.tz.setDefault("Europe/Paris");
 moment.locale('fr');
-const myCache = new NodeCache();
+storage.init();
 
 require('./const');
 
@@ -138,11 +139,25 @@ const getMoreInformations = (uic) => {
 			return lastRes;
 		else
 			return result.data.reponseRechercherProchainsDeparts.reponse.listeResultats.resultat[0].donnees;
+	})
+	// log ERROR
+	.catch(err => {
+		fs.appendFile('log.txt',
+			'••••••••••••••••••••••••••••••••••••\n'
+			+moment().format()
+			+'\n-----------------\n'
+			+'status : '+JSON.stringify(err.response.status)+' => '+JSON.stringify(err.response.statusText)+'\n'
+			+'config : '+JSON.stringify(err.response.config)+'\n'
+			+'data   : '+JSON.stringify(err.response.data)
+			+'\n-----------------\n'
+			+'••••••••••••••••••••••••••••••••••••\n\n',
+			()=>{return {}}
+		);
 	});
 }
 
 const getService = (t, uic, more = null, livemap = null) => {
-	const SncfMore = _.find(more.listeHoraires.horaire, {circulation:{numero: t.trainNumber}})
+	const SncfMore = more ? _.find(more.listeHoraires.horaire, {circulation:{numero: t.trainNumber}}) : false;
 	const train = {
 		name: t.trainMissionCode,
 		number: t.trainNumber,
@@ -307,42 +322,50 @@ module.exports = Departures = {
 			//stationName = $('body').find(".GareDepart > .bluefont").text().trim();
 			//console.log(uic = /'&departureCodeUIC8=(\d{8})'/gm.exec($('script[type="text/javascript"]').get()[7].children[0].data)[1])
 			const infos = $('body').find("#infos").val()
-			if(infos){
-				myCache.set(uic, JSON.parse(infos), 1800)
-				return JSON.parse(infos);
-			} else {
-				return myCache.get(uic);
-				//return new Promise((resolve, reject) => {
-				//	getSncfRealTimeApi(uic).then(response => {
-				//		const parseString = Promise.promisifyAll(require('xml2js')).parseString;
-				//		let sncfPassages;
-				//		parseString(response.data, function (err, result) {
-				//			sncfPassages = result.passages;
-				//		});
-				//		/*sncfPassages.train.term = _.result(_.find(gares, function (obj) {
-				//			return obj.uic7 === parseInt(sncfPassages.term[0].slice(0, -1));
-				//		}), 'nom_gare_sncf');*/
-				//		resolve(sncfPassages.train);
-				//	})
-				//});
-			}
+			//if(infos && moreInfos){
+			//	//myCache.set(uic, JSON.parse(infos), 1800)
+			//	return storage.setItem(uic, JSON.parse(infos))
+			//	.then(()=> {return JSON.parse(infos)})
+			//} else {
+			//	return storage.getItem(uic).then(data => {console.log(data)});
+			//	//return new Promise((resolve, reject) => {
+			//	//	getSncfRealTimeApi(uic).then(response => {
+			//	//		const parseString = Promise.promisifyAll(require('xml2js')).parseString;
+			//	//		let sncfPassages;
+			//	//		parseString(response.data, function (err, result) {
+			//	//			sncfPassages = result.passages;
+			//	//		});
+			//	//		/*sncfPassages.train.term = _.result(_.find(gares, function (obj) {
+			//	//			return obj.uic7 === parseInt(sncfPassages.term[0].slice(0, -1));
+			//	//		}), 'nom_gare_sncf');*/
+			//	//		resolve(sncfPassages.train);
+			//	//	})
+			//	//});
+			//}
+			return JSON.parse(infos)
 		})
 		.then(data => Promise.all(data.slice(0,6).map(train => getService(train, uic, moreInfos, liveMap))))
+		.then(sncf => {
+			if(moreInfos){
+				return storage.setItem(uic, sncf)
+				.then(()=> {return sncf})
+			} else {
+				return storage.getItem(uic);
+			}
+		})
 		.then(sncf => res.json(sncf))
+		// log ERROR
 		.catch(err => {
-			const fs = Promise.promisifyAll(require('fs'));
 			fs.appendFile('log.txt',
 			'••••••••••••••••••••••••••••••••••••\n'
 			+moment().format()
 			+'\n-----------------\n'
-			+'status : '+JSON.stringify(err.response.status)+' => '+JSON.stringify(err.response.statusText)+'\n'
-			+'config : '+JSON.stringify(err.response.config)+'\n'
-			+'data   : '+JSON.stringify(err.response.data)
+			+'error  : '+err
 			+'\n-----------------\n'
 			+'••••••••••••••••••••••••••••••••••••\n\n',
-			function (err) {
+			(err) => {
 				if (err) throw err;
-				res.status(404).end("Il n'y a aucun prochains départs en temps réél pour la gare")
+				res.status(404).end("un probleme est survenu")
 			});
 		})
 	},
