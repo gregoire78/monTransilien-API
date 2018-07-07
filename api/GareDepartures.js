@@ -17,7 +17,21 @@ storage.init();
 require('./const');
 
 const getSNCFRealTimeApi = (codeTR3A) => {
-	return axios.get(`https://transilien.mobi/train/result?idOrigin=${codeTR3A}&idDest=`);
+	return axios.get(`https://transilien.mobi/train/result?idOrigin=${codeTR3A}&idDest=`)
+	// log ERROR
+	.catch(err => {
+		fs.appendFile('log.txt',
+			'••••••••••••••••••••••••••••••••••••\n'
+			+moment().format()
+			+'\n-----------------\n'
+			+'status : '+JSON.stringify(err.response.status)+' => '+JSON.stringify(err.response.statusText)+'\n'
+			+'config : '+JSON.stringify(err.response.config)+'\n'
+			+'data   : '+JSON.stringify(err.response.data)
+			+'\n-----------------\n'
+			+'••••••••••••••••••••••••••••••••••••\n\n',
+			()=>{return {}}
+		);
+	});
 }
 const getSncfRealTimeApi = (uic) => {
 	return axios.get(`http://api.transilien.com/gare/${uic}/depart/`, {
