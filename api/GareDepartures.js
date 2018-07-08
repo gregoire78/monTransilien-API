@@ -373,7 +373,7 @@ module.exports = Departures = {
 			}
 		})
 		.then(data => new Promise(resolve => {
-			if(data[0].gareDepart){
+			if(!_.isEmpty(data) && data[0].gareDepart){
 				resolve(Promise.all(data.slice(0,6).map(train => getService(train, uic, moreInfos, liveMap))))
 			} else {
 				resolve(data)
