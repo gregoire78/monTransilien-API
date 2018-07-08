@@ -88,6 +88,20 @@ const getListPassage = (t) => {
 				departure_time : list.time
 			}
 		})
+	})
+	// log ERROR
+	.catch(err => {
+		fs.appendFile('log.txt',
+			'••••••••••••••••••••••••••••••••••••\n'
+			+moment().format()
+			+'\n-----------------\n'
+			+'status : '+JSON.stringify(err.response.status)+' => '+JSON.stringify(err.response.statusText)+'\n'
+			+'config : '+JSON.stringify(err.response.config)+'\n'
+			+'data   : '+JSON.stringify(err.response.data)
+			+'\n-----------------\n'
+			+'••••••••••••••••••••••••••••••••••••\n\n',
+			()=>{return {}}
+		);
 	});
 }
 
@@ -336,12 +350,13 @@ module.exports = Departures = {
 			//stationName = $('body').find(".GareDepart > .bluefont").text().trim();
 			//console.log(uic = /'&departureCodeUIC8=(\d{8})'/gm.exec($('script[type="text/javascript"]').get()[7].children[0].data)[1])
 			const infos = $('body').find("#infos").val()
-			//if(infos && moreInfos){
-			//	//myCache.set(uic, JSON.parse(infos), 1800)
-			//	return storage.setItem(uic, JSON.parse(infos))
-			//	.then(()=> {return JSON.parse(infos)})
-			//} else {
-			//	return storage.getItem(uic).then(data => {console.log(data)});
+			if(infos){
+				//myCache.set(uic, JSON.parse(infos), 1800)
+				//return storage.setItem(uic, JSON.parse(infos))
+				//.then(()=> {return JSON.parse(infos)})
+				return JSON.parse(infos)
+			} else {
+				return storage.getItem(uic);
 			//	//return new Promise((resolve, reject) => {
 			//	//	getSncfRealTimeApi(uic).then(response => {
 			//	//		const parseString = Promise.promisifyAll(require('xml2js')).parseString;
@@ -355,10 +370,15 @@ module.exports = Departures = {
 			//	//		resolve(sncfPassages.train);
 			//	//	})
 			//	//});
-			//}
-			return JSON.parse(infos)
+			}
 		})
-		.then(data => Promise.all(data.slice(0,6).map(train => getService(train, uic, moreInfos, liveMap))))
+		.then(data => new Promise(resolve => {
+			if(data[0].gareDepart){
+				resolve(Promise.all(data.slice(0,6).map(train => getService(train, uic, moreInfos, liveMap))))
+			} else {
+				resolve(data)
+			}
+		}))
 		.then(sncf => {
 			if(moreInfos){
 				return storage.setItem(uic, sncf)
