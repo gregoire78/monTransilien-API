@@ -19,19 +19,7 @@ require('./const');
 const getSNCFRealTimeApi = (codeTR3A) => {
 	return axios.get(`https://transilien.mobi/train/result?idOrigin=${codeTR3A}&idDest=`)
 	// log ERROR
-	.catch(err => {
-		fs.appendFile('log.txt',
-			'••••••••••••••••••••••••••••••••••••\n'
-			+moment().format()
-			+'\n-----------------\n'
-			+'status : '+JSON.stringify(err.response.status)+' => '+JSON.stringify(err.response.statusText)+'\n'
-			+'config : '+JSON.stringify(err.response.config)+'\n'
-			+'data   : '+JSON.stringify(err.response.data)
-			+'\n-----------------\n'
-			+'••••••••••••••••••••••••••••••••••••\n\n',
-			()=>{return {}}
-		);
-	});
+	.catch(err => logWritter(err));
 }
 const getSncfRealTimeApi = (uic) => {
 	return axios.get(`http://api.transilien.com/gare/${uic}/depart/`, {
@@ -43,12 +31,16 @@ const getSncfRealTimeApi = (uic) => {
 			'Accept': 'application/vnd.sncf.transilien.od.depart+xml;vers=1'
 		},
 		responseType: 'text'
-	});
+	})
+	// log ERROR
+	.catch(err => logWritter(err));
 }
 
 const getRATPMission = (train) => {
 	return axios.get(`https://api-ratp.pierre-grimaud.fr/v3/mission/rers/${train.route.line.code}/${train.name}?_format=json`)
 	.then(response => { return response.data })
+	// log ERROR
+	.catch(err => logWritter(err));
 }
 
 const getStationLines = (codeTR3A) => {
@@ -69,12 +61,15 @@ const getStationLines = (codeTR3A) => {
 			}), 'uic7');
 			return _.filter(lignes, {"uic": uic}).map(values => {return values.line})
 		} else return lines;
-	});
+	})
+	// log ERROR
+	.catch(err => logWritter(err));
 }
 
 const getTraficObject = () => {
 	return axios.get(`https://www.sncf.com/api/iv/1.0/avance/rechercherPrevisions?format=html`)
 	.then(response => { return response.data.reponseRechercherPrevisions.reponse.listeResultats.resultat[0].donnees.listeInformations.information })
+	.catch(err => logWritter(err));
 }
 
 const getListPassage = (t) => {
@@ -90,19 +85,7 @@ const getListPassage = (t) => {
 		})
 	})
 	// log ERROR
-	.catch(err => {
-		fs.appendFile('log.txt',
-			'••••••••••••••••••••••••••••••••••••\n'
-			+moment().format()
-			+'\n-----------------\n'
-			+'status : '+JSON.stringify(err.response.status)+' => '+JSON.stringify(err.response.statusText)+'\n'
-			+'config : '+JSON.stringify(err.response.config)+'\n'
-			+'data   : '+JSON.stringify(err.response.data)
-			+'\n-----------------\n'
-			+'••••••••••••••••••••••••••••••••••••\n\n',
-			()=>{return {}}
-		);
-	});
+	.catch(err => logWritter(err));
 }
 
 const getVehiculeJourney = (train, t = null) => {
@@ -127,8 +110,8 @@ const getVehiculeJourney = (train, t = null) => {
 			.catch(err => {resolve({})})*/
 			//console.log('⚠ get vehiclejourney  '+train.number)
 			return getListPassage(t)
-			.then(response => {resolve(response)})
-			.catch(err => {resolve({})})
+			.then(response => resolve(response))
+			.catch(err => resolve({}))
 		})
 	})
 }
@@ -142,7 +125,9 @@ const getRoute = (train) => {
 	.then(response => {
 		return response.data
 	})
-	.catch(err => {/*console.log('⚠ get route           '+train.number)*/})
+	// log ERROR
+	.catch(err => logWritter(err));
+	//.catch(err => {/*console.log('⚠ get route           '+train.number)*/})
 }
 
 const getUIC = (tr3a) => {
@@ -169,8 +154,11 @@ const getMoreInformations = (uic) => {
 			return result.data.reponseRechercherProchainsDeparts.reponse.listeResultats.resultat[0].donnees;
 	})
 	// log ERROR
-	.catch(err => {
-		fs.appendFile('log.txt',
+	.catch(err => logWritter(err));
+}
+
+const logWritter = (err) => {
+	fs.appendFile('log.txt',
 			'••••••••••••••••••••••••••••••••••••\n'
 			+moment().format()
 			+'\n-----------------\n'
@@ -181,7 +169,6 @@ const getMoreInformations = (uic) => {
 			+'••••••••••••••••••••••••••••••••••••\n\n',
 			()=>{return {}}
 		);
-	});
 }
 
 const getService = (t, uic, more = null, livemap = null) => {
