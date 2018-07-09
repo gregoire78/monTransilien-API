@@ -322,7 +322,7 @@ const getService = (t, uic, more = null, livemap = null) => {
 				}
 			}
 
-			train.distance = livemap.filter(obj => {return obj.savedNumber == train.number})[0];
+			train.distance = livemap.find(obj => {return obj.savedNumber == train.number});
 			train.expectedDepartureTime = moment(train.expectedDepartureTime).format('LT');
 	
 			train.route.line = _.pickBy(train.route.line, _.identity);
