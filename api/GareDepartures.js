@@ -18,8 +18,11 @@ require('./const');
 
 const getSNCFRealTimeApi = (codeTR3A) => {
 	return axios.get(`https://transilien.mobi/train/result?idOrigin=${codeTR3A}&idDest=`)
-	// log ERROR
-	.catch(err => logWritter(err));
+	.then(response => {
+		const $ = cheerio.load(response.data);
+		return JSON.parse($('body').find("#infos").val())
+	}, err => logWritter(err))
+	.catch(() => {return {}});
 }
 const getSncfRealTimeApi = (uic) => {
 	return axios.get(`http://api.transilien.com/gare/${uic}/depart/`, {
@@ -171,9 +174,9 @@ const getMoreInformations = (uic) => {
 			return lastRes;
 		else
 			return result.data.reponseRechercherProchainsDeparts.reponse.listeResultats.resultat[0].donnees;
-	})
+	}, err => logWritter(err))
 	// log ERROR
-	.catch(err => logWritter(err));
+	.catch(() => {return {}});
 }
 
 const logWritter = (err) => {
@@ -339,62 +342,24 @@ module.exports = Departures = {
 			lat: req.query.lat,
 			long: req.query.long
 		}
-		let liveMap, moreInfos, $;
+		let liveMap, moreInfos, trainsJsonBrut;
 		
-		const getPassageAPI = getSNCFRealTimeApi(tr3a).then(response => {
-			const $ = cheerio.load(response.data);
-			return $;
-		}); 
-
-		/*getUIC(tr3a)
-		.then(d => {stationName = d.nom_gare, uic = d.code_uic, gps = {lat: d.coord_gps_wgs84[0], long: d.coord_gps_wgs84[1]}})
-		.then(() => Promise.all([LiveMap(gps), getMoreInformations(uic), getPassageAPI]))*/
-		Promise.all([LiveMap(gps), getMoreInformations(uic), getPassageAPI])
+		Promise.all([LiveMap(gps), getMoreInformations(uic), getSNCFRealTimeApi(tr3a)])
 		.then(values => {
 			liveMap = values[0];
 			moreInfos = values[1]; 
-			$ = values[2];
-			// messages traffic
-			//sncfInfos = _.uniqBy(_.map(moreInfos.listeHoraires.horaire, 'circulation.ligne.listeMessagesConjoncturels.messagesConjoncturels'), (e)=>{return e.titre})
-			//stationName = $('body').find(".GareDepart > .bluefont").text().trim();
-			//console.log(uic = /'&departureCodeUIC8=(\d{8})'/gm.exec($('script[type="text/javascript"]').get()[7].children[0].data)[1])
-			const infos = $('body').find("#infos").val()
-			if(infos){
-				//myCache.set(uic, JSON.parse(infos), 1800)
-				//return storage.setItem(uic, JSON.parse(infos))
-				//.then(()=> {return JSON.parse(infos)})
-				return JSON.parse(infos)
-			} else {
-				return storage.getItem(uic);
-			//	//return new Promise((resolve, reject) => {
-			//	//	getSncfRealTimeApi(uic).then(response => {
-			//	//		const parseString = Promise.promisifyAll(require('xml2js')).parseString;
-			//	//		let sncfPassages;
-			//	//		parseString(response.data, function (err, result) {
-			//	//			sncfPassages = result.passages;
-			//	//		});
-			//	//		/*sncfPassages.train.term = _.result(_.find(gares, function (obj) {
-			//	//			return obj.uic7 === parseInt(sncfPassages.term[0].slice(0, -1));
-			//	//		}), 'nom_gare_sncf');*/
-			//	//		resolve(sncfPassages.train);
-			//	//	})
-			//	//});
-			}
-		})
-		.then(data => new Promise(resolve => {
-			if(!_.isEmpty(data) && data[0].gareDepart){
-				resolve(Promise.all(data.slice(0,6).map(train => getService(train, uic, moreInfos, liveMap))))
-			} else {
-				resolve(data)
-			}
-		}))
-		.then(sncf => {
-			if(moreInfos){
-				return storage.setItem(uic, sncf)
-				.then(()=> {return sncf})
-			} else {
-				return storage.getItem(uic);
-			}
+			trainsJsonBrut = values[2];
+			
+			return new Promise(resolve => {
+				if(!_.isEmpty(trainsJsonBrut)){
+						Promise.all(trainsJsonBrut.slice(0,6).map(train => getService(train, uic, moreInfos, liveMap)))
+						.then(sncf => {
+							storage.setItem(uic, sncf).then(()=> {resolve(sncf)})
+						})
+				} else {
+					resolve(storage.getItem(uic));
+				}
+			})
 		})
 		.then(sncf => res.json(sncf))
 		// log ERROR
