@@ -20,7 +20,7 @@ const getSNCFRealTimeApi = (codeTR3A) => {
 	return axios.get(`https://transilien.mobi/train/result?idOrigin=${codeTR3A}&idDest=`)
 	.then(response => {
 		const $ = cheerio.load(response.data);
-		return JSON.parse($('body').find("#infos").val())
+		return {origine: $('body').find("#origine").val(), brut: JSON.parse($('body').find("#infos").val())}
 	}, err => logWritter(err))
 	.catch(() => {return {}});
 }
@@ -351,8 +351,8 @@ module.exports = Departures = {
 			trainsJsonBrut = values[2];
 			
 			return new Promise(resolve => {
-				if(!_.isEmpty(trainsJsonBrut)){
-						Promise.all(trainsJsonBrut.slice(0,6).map(train => getService(train, uic, moreInfos, liveMap)))
+				if(trainsJsonBrut.origine){
+						Promise.all(trainsJsonBrut.brut.slice(0,6).map(train => getService(train, uic, moreInfos, liveMap)))
 						.then(sncf => {
 							storage.setItem(uic, sncf).then(()=> {resolve(sncf)})
 						})
