@@ -314,7 +314,7 @@ const getService = (t, uic, more = null, livemap = null) => {
 					const troute = result[1].routes[0];
 					train.route.name = troute.name;
 					train.route.line.color = troute.line.color;
-					train.route.line.code = troute.line.code ? troute.line.code : SncfMore.circulation.ligne ? SncfMore.circulation.ligne.libelleNumero: '';
+					train.route.line.code = troute.line.code ? troute.line.code : (SncfMore && SncfMore.circulation.ligne ? SncfMore.circulation.ligne.libelleNumero: '');
 					train.route.line.name = troute.line.name;
 				}
 				else {
@@ -324,7 +324,7 @@ const getService = (t, uic, more = null, livemap = null) => {
 
 			train.distance = livemap.filter(obj => {return obj.savedNumber == train.number})[0];
 			train.expectedDepartureTime = moment(train.expectedDepartureTime).format('LT');
-			
+	
 			train.route.line = _.pickBy(train.route.line, _.identity);
 			train.route = _.pickBy(train.route, _.identity);
 			return _.pickBy(train, _.identity)
