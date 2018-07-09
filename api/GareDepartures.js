@@ -43,6 +43,15 @@ const getRATPMission = (train) => {
 	.catch(err => logWritter(err));
 }
 
+function getColorLigne(q) {
+	return axios.get(`https://data.sncf.com/api/records/1.0/search/?dataset=codes-couleur-des-lignes-transilien&q="${q}"&rows=1`)
+	.then(result => {
+		return !_.isEmpty(result.data.records) ? result.data.records[0].fields : q;
+	})
+	// log ERROR
+	.catch(err => logWritter(err));
+}
+
 const getStationLines = (codeTR3A) => {
 	return axios.get(`https://transilien.mobi/gare/detail?id=${codeTR3A}`)
 	.then(response => {
@@ -116,7 +125,7 @@ const getVehiculeJourney = (train, t = null) => {
 	})
 }
 
-const getRoute = (train) => {
+const getRoute = (train, t = null) => {
 	return axios.get(`https://api.sncf.com/v1/coverage/sncf/routes?headsign=${train.number}&disable_geojson=true`, {
 		headers: {
 			'Authorization': SNCFAPI_KEY
@@ -125,8 +134,18 @@ const getRoute = (train) => {
 	.then(response => {
 		return response.data
 	})
-	// log ERROR
-	.catch(err => logWritter(err));
+	.catch(err =>{ return new Promise(resolve => {
+		train.route.line.code = train.route.type !== "ter" ? t.ligne.idLigne : null;
+		if(train.route.line.code) {
+			return getColorLigne(t.ligne.idLigne)
+			.then(toto => {
+				train.route.line.color = toto.code_hexadecimal.slice(1);
+				resolve(train.route.line)
+			})
+		} else {
+			resolve(train.route.line)
+		}
+	})});
 	//.catch(err => {/*console.log('⚠ get route           '+train.number)*/})
 }
 
@@ -159,16 +178,16 @@ const getMoreInformations = (uic) => {
 
 const logWritter = (err) => {
 	fs.appendFile('log.txt',
-			'••••••••••••••••••••••••••••••••••••\n'
-			+moment().format()
-			+'\n-----------------\n'
-			+'status : '+JSON.stringify(err.response.status)+' => '+JSON.stringify(err.response.statusText)+'\n'
-			+'config : '+JSON.stringify(err.response.config)+'\n'
-			+'data   : '+JSON.stringify(err.response.data)
-			+'\n-----------------\n'
-			+'••••••••••••••••••••••••••••••••••••\n\n',
-			()=>{return {}}
-		);
+		'••••••••••••••••••••••••••••••••••••\n'
+		+moment().format()
+		+'\n-----------------\n'
+		+'status : '+JSON.stringify(err.response.status)+' => '+JSON.stringify(err.response.statusText)+'\n'
+		+'config : '+JSON.stringify(err.response.config)+'\n'
+		+'data   : '+JSON.stringify(err.response.data)
+		+'\n-----------------\n'
+		+'••••••••••••••••••••••••••••••••••••\n\n',
+		()=>{return {}}
+	);
 }
 
 const getService = (t, uic, more = null, livemap = null) => {
@@ -247,8 +266,8 @@ const getService = (t, uic, more = null, livemap = null) => {
 								(((t.trainNumber >= 830000 || (t.trainNumber >= 16750 && t.trainNumber <= 168749)) && t.ligne.type == "TRAIN") ? "ter" : "TRAIN"))
 	}
 	//return new Promise((resolve, reject) => {
-		return Promise.all([getVehiculeJourney(train, t), getRoute(train)])
-		.then(result => {	
+		return Promise.all([getVehiculeJourney(train, t), getRoute(train, t)])
+		.then(result => {
 			let late = 0;
 			//si get vehicule journey
 			if(!_.isEmpty(result[0])){
@@ -288,13 +307,16 @@ const getService = (t, uic, more = null, livemap = null) => {
 			}
 			// si get route
 			if(!_.isEmpty(result[1])){
-				const troute = result[1].routes[0];
-				train.route.name = troute.name;
-				train.route.line.color = troute.line.color;
-				train.route.line.code = troute.line.code ? troute.line.code : SncfMore.circulation.ligne ? SncfMore.circulation.ligne.libelleNumero: '';
-				train.route.line.name = troute.line.name;
-			} else {
-				train.route.line.code = train.route.type !== "ter" ? t.ligne.idLigne : null;
+				if(result[1].routes) {
+					const troute = result[1].routes[0];
+					train.route.name = troute.name;
+					train.route.line.color = troute.line.color;
+					train.route.line.code = troute.line.code ? troute.line.code : SncfMore.circulation.ligne ? SncfMore.circulation.ligne.libelleNumero: '';
+					train.route.line.name = troute.line.name;
+				}
+				else {
+					train.route.line = result[1];
+				}
 			}
 
 			train.distance = livemap.filter(obj => {return obj.savedNumber == train.number})[0];
