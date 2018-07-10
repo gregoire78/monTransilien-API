@@ -20,9 +20,15 @@ const getSNCFRealTimeApi = (codeTR3A) => {
 	return axios.get(`https://transilien.mobi/train/result?idOrigin=${codeTR3A}&idDest=`)
 	.then(response => {
 		const $ = cheerio.load(response.data);
-		return {origine: $('body').find("#origine").val(), brut: JSON.parse($('body').find("#infos").val())}
-	}, err => logWritter(err))
-	.catch(() => {return {}});
+		const originElem = $('body').find("#origine");
+		const brutElem = $('body').find("#infos");
+		if(originElem.val() && brutElem.val()){
+			return {origine: originElem.val(), brut: JSON.parse(brutElem.val())}
+		}
+		else return {}
+	})
+	// log ERROR
+	.catch(err => logWritter(err));
 }
 const getSncfRealTimeApi = (uic) => {
 	return axios.get(`http://api.transilien.com/gare/${uic}/depart/`, {
@@ -46,17 +52,8 @@ const getRATPMission = (train) => {
 	.catch(err => logWritter(err));
 }
 
-function getColorLigne(q) {
-	return axios.get(`https://data.sncf.com/api/records/1.0/search/?dataset=codes-couleur-des-lignes-transilien&q="${q}"&rows=1`)
-	.then(result => {
-		return !_.isEmpty(result.data.records) ? result.data.records[0].fields : q;
-	})
-	// log ERROR
-	.catch(err => logWritter(err));
-}
-
 const getStationLines = (codeTR3A) => {
-	return axios.get(`https://transilien.mobi/gare/detail?id=${codeTR3A}`)
+	return axios.get(`https://transilien.mobi/gare/detil?id=${codeTR3A}`)
 	.then(response => {
 		const $ = cheerio.load(response.data);
 		return $;
@@ -81,6 +78,16 @@ const getStationLines = (codeTR3A) => {
 const getTraficObject = () => {
 	return axios.get(`https://www.sncf.com/api/iv/1.0/avance/rechercherPrevisions?format=html`)
 	.then(response => { return response.data.reponseRechercherPrevisions.reponse.listeResultats.resultat[0].donnees.listeInformations.information })
+	// log ERROR
+	.catch(err => logWritter(err));
+}
+
+function getColorLigne(q) {
+	return axios.get(`https://data.sncf.com/api/records/1.0/search/?dataset=codes-couleur-des-lignes-transilien&q="${q}"&rows=1`)
+	.then(result => {
+		return !_.isEmpty(result.data.records) ? result.data.records[0].fields : q;
+	})
+	// log ERROR
 	.catch(err => logWritter(err));
 }
 
@@ -111,16 +118,8 @@ const getVehiculeJourney = (train, t = null) => {
 		return response.data
 	})
 	.catch(err => {
+		logWritter(err)
 		return new Promise((resolve) => {
-			//console.log(`https://api.sncf.com/v1/coverage/sncf/vehicle_journeys?headsign=${train.number}`)
-			/*return axios.get(`https://api.sncf.com/v1/coverage/sncf/vehicle_journeys?headsign=${train.number}`,{
-				headers: {
-					'Authorization': SNCFAPI_KEY
-				}
-			})
-			.then(response => { resolve(response.data) })
-			.catch(err => {resolve({})})*/
-			//console.log('⚠ get vehiclejourney  '+train.number)
 			return getListPassage(t)
 			.then(response => resolve(response))
 			.catch(err => resolve({}))
@@ -137,19 +136,21 @@ const getRoute = (train, t = null) => {
 	.then(response => {
 		return response.data
 	})
-	.catch(err =>{ return new Promise(resolve => {
-		train.route.line.code = train.route.type !== "ter" ? t.ligne.idLigne : null;
-		if(train.route.line.code) {
-			return getColorLigne(t.ligne.idLigne)
-			.then(toto => {
-				train.route.line.color = toto.code_hexadecimal.slice(1);
+	.catch(err =>{
+		return new Promise(resolve => {
+			train.route.line.code = train.route.type !== "ter" ? t.ligne.idLigne : null;
+			if(train.route.line.code) {
+				return getColorLigne(t.ligne.idLigne)
+				.then(toto => {
+					train.route.line.color = toto.code_hexadecimal.slice(1);
+					resolve(train.route.line)
+				})
+				.catch(err => resolve({}));
+			} else {
 				resolve(train.route.line)
-			})
-		} else {
-			resolve(train.route.line)
-		}
-	})});
-	//.catch(err => {/*console.log('⚠ get route           '+train.number)*/})
+			}
+		});
+	});
 }
 
 const getUIC = (tr3a) => {
@@ -174,23 +175,29 @@ const getMoreInformations = (uic) => {
 			return lastRes;
 		else
 			return result.data.reponseRechercherProchainsDeparts.reponse.listeResultats.resultat[0].donnees;
-	}, err => logWritter(err))
+	})
 	// log ERROR
-	.catch(() => {return {}});
+	.catch(err => logWritter(err));
 }
 
 const logWritter = (err) => {
-	fs.appendFile('log.txt',
-		'••••••••••••••••••••••••••••••••••••\n'
-		+moment().format()
+	let text;
+	if(err.response) {
+		text = moment().format()
 		+'\n-----------------\n'
 		+'status : '+JSON.stringify(err.response.status)+' => '+JSON.stringify(err.response.statusText)+'\n'
 		+'config : '+JSON.stringify(err.response.config)+'\n'
 		+'data   : '+JSON.stringify(err.response.data)
 		+'\n-----------------\n'
-		+'••••••••••••••••••••••••••••••••••••\n\n',
-		()=>{return {}}
-	);
+		+'••••••••••••••••••••••••••••••••••••\n'
+	} else {
+		text = moment().format()
+		+'\n-----------------\n'
+		+'error  : '+err
+		+'\n-----------------\n'
+		+'••••••••••••••••••••••••••••••••••••\n'
+	}
+	fs.appendFile('log.txt',text,()=>{return {}});
 }
 
 const getService = (t, uic, more = null, livemap = null) => {
@@ -351,31 +358,20 @@ module.exports = Departures = {
 			trainsJsonBrut = values[2];
 			
 			return new Promise(resolve => {
-				if(trainsJsonBrut.origine){
+				if(!_.isEmpty(trainsJsonBrut) && !_.isEmpty(moreInfos)){
 						Promise.all(trainsJsonBrut.brut.slice(0,6).map(train => getService(train, uic, moreInfos, liveMap)))
 						.then(sncf => {
 							storage.setItem(uic, sncf).then(()=> {resolve(sncf)})
 						})
 				} else {
+					console.log("get from storage")
 					resolve(storage.getItem(uic));
 				}
 			})
 		})
 		.then(sncf => res.json(sncf))
 		// log ERROR
-		.catch(err => {
-			fs.appendFile('log.txt',
-			'••••••••••••••••••••••••••••••••••••\n'
-			+moment().format()
-			+'\n-----------------\n'
-			+'error  : '+err
-			+'\n-----------------\n'
-			+'••••••••••••••••••••••••••••••••••••\n\n',
-			(err) => {
-				if (err) throw err;
-				res.status(404).end("un probleme est survenu")
-			});
-		})
+		.catch(err => logWritter(err))
 	},
 
 	getStation: (req, res, next) => {
@@ -420,6 +416,7 @@ module.exports = Departures = {
 				})
 			})
 			.then(json => res.json(json))
+			.catch(err => res.json({}))
 		} else {
 			objTrafic
 			.then(response => {
@@ -438,6 +435,7 @@ module.exports = Departures = {
 				})
 			})
 			.then(json => res.json(json))
+			.catch(err => res.json({}))
 		}
 	}
 }
