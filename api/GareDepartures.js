@@ -337,7 +337,7 @@ const getService = (t, uic, more = null, livemap = null) => {
 			return _.pickBy(train, _.identity)
 		})
 		.then(data => {return data})
-		.catch(err => {})
+		.catch(err => {return {}})
 	//})
 }
 
