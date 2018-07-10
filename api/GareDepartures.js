@@ -53,7 +53,7 @@ const getRATPMission = (train) => {
 }
 
 const getStationLines = (codeTR3A) => {
-	return axios.get(`https://transilien.mobi/gare/detil?id=${codeTR3A}`)
+	return axios.get(`https://transilien.mobi/gare/detail?id=${codeTR3A}`)
 	.then(response => {
 		const $ = cheerio.load(response.data);
 		return $;
