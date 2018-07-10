@@ -364,7 +364,6 @@ module.exports = Departures = {
 							storage.setItem(uic, sncf).then(()=> {resolve(sncf)})
 						})
 				} else {
-					console.log("get from storage")
 					resolve(storage.getItem(uic));
 				}
 			})
