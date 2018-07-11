@@ -200,7 +200,7 @@ const logWritter = (err) => {
 	fs.appendFile('log.txt',text,()=>{return {}});
 }
 
-const getService = (t, uic, more = null, livemap = null) => {
+const getService = (t, uic, more = null, livemap = []) => {
 	const SncfMore = more ? _.find(more.listeHoraires.horaire, {circulation:{numero: t.trainNumber}}) : false;
 	const train = {
 		name: t.trainMissionCode,
@@ -212,7 +212,7 @@ const getService = (t, uic, more = null, livemap = null) => {
 		state: null,
 		nature: null,
 		lane: t.trainLane,
-		distance: null,
+		distance: livemap.find(obj => {return obj.savedNumber == t.trainNumber}),
 		route: {
 			name: null,
 			line: {
@@ -328,8 +328,6 @@ const getService = (t, uic, more = null, livemap = null) => {
 					train.route.line = result[1];
 				}
 			}
-
-			train.distance = livemap.find(obj => {return obj.savedNumber == train.number});
 			train.expectedDepartureTime = moment(train.expectedDepartureTime).format('LT');
 	
 			train.route.line = _.pickBy(train.route.line, _.identity);
@@ -351,7 +349,7 @@ module.exports = Departures = {
 		}
 		let liveMap, moreInfos, trainsJsonBrut;
 		
-		Promise.all([LiveMap(gps), getMoreInformations(uic), getSNCFRealTimeApi(tr3a)])
+		Promise.all([LiveMap(gps).catch(err => logWritter(err)), getMoreInformations(uic), getSNCFRealTimeApi(tr3a)])
 		.then(values => {
 			liveMap = values[0];
 			moreInfos = values[1]; 
