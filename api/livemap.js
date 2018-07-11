@@ -68,8 +68,10 @@ module.exports = function() {
 		if(req.params.filter) {
 			mapdata.then(res=> { return res.filter(obj => {return obj.savedNumber == req.params.filter})[0]})
 			.then(data => res.json(data))
+			.catch(err => {res.status(500).end('error')})
 		} else {
 			mapdata.then(data => res.json(data))
+			.catch(err => {res.status(500).end('error')})
 		}
 	}
 
