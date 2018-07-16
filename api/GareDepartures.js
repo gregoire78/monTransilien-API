@@ -414,7 +414,29 @@ module.exports = Departures = {
 			})
 			.then(json => res.json(json))
 			.catch(err => res.json({}))
-		} else {
+		}
+		else if(req.body.lines){
+			const lines = req.body.lines;
+			objTrafic
+			.then(response => {
+				return response.filter(obj => {
+					if(obj.ligne) {
+						const now = moment().format('YYYY-MM-DDTHH:mm:ss');
+						const debut = moment.utc(obj.dateHeureDebut).format('YYYY-MM-DDTHH:mm:ss');
+						const fin = moment.utc(obj.dateHeureFin).format('YYYY-MM-DDTHH:mm:ss');
+						if(type) {
+							return _.includes(lines, obj.ligne.libelleNumero) && fin >= now && debut <= now && obj.typeMessage == type
+						} else {
+							return _.includes(lines, obj.ligne.libelleNumero) && fin >= now && debut <= now
+						}
+					}
+					else return false
+				})
+			})
+			.then(json => res.json(json))
+			.catch(err => res.json({}))
+		}
+		else {
 			objTrafic
 			.then(response => {
 				return response.filter(obj => {
