@@ -108,6 +108,7 @@ const getListPassage = (t) => {
 }
 
 const getVehiculeJourney = (train, t = null) => {
+	console.log(`https://api.sncf.com/v1/coverage/sncf/vehicle_journeys?headsign=${train.number}&since=${moment(train.expectedDepartureTime).format('YYYYMMDD[T000000]')}&until=${moment(train.expectedDepartureTime).format('YYYYMMDD[T235959]')}&disable_geojson=true`)
 	return axios.get(`https://api.sncf.com/v1/coverage/sncf/vehicle_journeys?headsign=${train.number}&since=${moment(train.expectedDepartureTime).format('YYYYMMDD[T000000]')}&until=${moment(train.expectedDepartureTime).format('YYYYMMDD[T235959]')}&disable_geojson=true`, {
 		headers: {
 			'Authorization': SNCFAPI_KEY
@@ -123,6 +124,52 @@ const getVehiculeJourney = (train, t = null) => {
 			return getListPassage(t)
 			.then(response => resolve(response))
 			.catch(err => resolve({}))
+		})
+	})
+}
+
+let departurejourney;
+const getVehiculeJourneys = (uic, href) => {
+	return new Promise(function(resolve) {
+		let linknext;
+		return axios.get(href, {
+			headers: {
+				'Authorization': SNCFAPI_KEY
+			}
+		})
+		.then(response => {
+			departurejourney = response.data.vehicle_journeys;
+			linknext = _.result(_.find(response.data.links, function(obj) {
+				return obj.type === 'next';
+			}), 'href');
+			return response;
+		})
+		.then(response => {
+			if(linknext) {
+				console.log(linknext)
+				getVehiculeJourneys(uic, linknext).then(t=>{
+					resolve(_.concat(departurejourney, response.data.vehicle_journeys))
+				})
+			} else {
+				resolve(departurejourney);
+			}
+		})
+		.catch(err => logWritter(err))
+	});
+}
+
+const getTheoriqueDepartures = (uic) => {
+	return new Promise(resolve => {
+		
+		storage.getItem(uic+"_departures").then(item => {
+			if(item) {
+				resolve(item)
+			} else {
+				return getVehiculeJourneys(uic, `https://api.sncf.com/v1/coverage/sncf/stop_areas/stop_area:OCE:SA:${uic}/vehicle_journeys?count=1000&since=${moment().format('YYYYMMDD[T000000]')}&until=${moment().format('YYYYMMDD[T235959]')}&disable_geojson=true&`)
+				.then(departures=>{
+					storage.setItem(uic+"_departures", departures, {ttl: moment().hour(0).minute(0).second(0).add(1,'d').diff(moment(), 'milliseconds') }).then(()=> {resolve(departures)}).catch(err => resolve({}));
+				})
+			}
 		})
 	})
 }
@@ -200,7 +247,7 @@ const logWritter = (err) => {
 	fs.appendFile('log.txt',text,()=>{return {}});
 }
 
-const getService = (t, uic, more = null, livemap = []) => {
+const getService = (t, uic, more = null, livemap = [], vehiculeJourneys = []) => {
 	const SncfMore = more ? _.find(more.listeHoraires.horaire, {circulation:{numero: t.trainNumber}}) : false;
 	const train = {
 		name: t.trainMissionCode,
@@ -276,6 +323,9 @@ const getService = (t, uic, more = null, livemap = []) => {
 								(((t.trainNumber >= 830000 || (t.trainNumber >= 16750 && t.trainNumber <= 168749)) && t.ligne.type == "TRAIN") ? "ter" : "TRAIN"))
 	}
 	//return new Promise((resolve, reject) => {
+		console.log(_.find(vehiculeJourneys, function(obj) {
+			return obj.stop_times[0].headsign === train.number;
+		}));
 		return Promise.all([getVehiculeJourney(train, t), getRoute(train, t)])
 		.then(result => {
 			let late = 0;
@@ -349,15 +399,16 @@ module.exports = Departures = {
 		}
 		let liveMap, moreInfos, trainsJsonBrut;
 		
-		Promise.all([LiveMap(gps).catch(err => logWritter(err)), getMoreInformations(uic), getSNCFRealTimeApi(tr3a)])
+		Promise.all([LiveMap(gps).catch(err => logWritter(err)), getMoreInformations(uic), getSNCFRealTimeApi(tr3a), getTheoriqueDepartures(uic)])
 		.then(values => {
 			liveMap = values[0];
 			moreInfos = values[1]; 
 			trainsJsonBrut = values[2];
+			trainsDepartures = values[3];
 			
 			return new Promise(resolve => {
 				if(!_.isEmpty(trainsJsonBrut) && !_.isEmpty(moreInfos)){
-						Promise.all(trainsJsonBrut.brut.slice(0,6).map(train => getService(train, uic, moreInfos, liveMap)))
+						Promise.all(trainsJsonBrut.brut.slice(0,6).map(train => getService(train, uic, moreInfos, liveMap, trainsDepartures)))
 						.then(sncf => {
 							storage.setItem(uic, sncf).then(()=> {resolve(sncf)})
 						})
