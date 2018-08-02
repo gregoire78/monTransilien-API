@@ -108,13 +108,12 @@ const getListPassage = (t) => {
 }
 
 const getVehiculeJourney = (train, t = null) => {
-	console.log(`https://api.sncf.com/v1/coverage/sncf/vehicle_journeys?headsign=${train.number}&since=${moment(train.expectedDepartureTime).format('YYYYMMDD[T000000]')}&until=${moment(train.expectedDepartureTime).format('YYYYMMDD[T235959]')}&disable_geojson=true`)
 	return axios.get(`https://api.sncf.com/v1/coverage/sncf/vehicle_journeys?headsign=${train.number}&since=${moment(train.expectedDepartureTime).format('YYYYMMDD[T000000]')}&until=${moment(train.expectedDepartureTime).format('YYYYMMDD[T235959]')}&disable_geojson=true`, {
 		headers: {
 			'Authorization': SNCFAPI_KEY
 		}
 	})
-	.then(response => { 
+	.then(response => {
 		//console.log(`https://api.sncf.com/v1/coverage/sncf/vehicle_journeys?headsign=${train.number}&since=${moment(train.expectedDepartureTime).format('YYYYMMDD[T000000]')}&until=${moment(train.expectedDepartureTime).format('YYYYMMDD[T235959]')}`)		
 		return response.data
 	})
@@ -160,7 +159,7 @@ const getVehiculeJourneys = (uic, href) => {
 
 const getTheoriqueDepartures = (uic) => {
 	return new Promise(resolve => {
-		
+
 		storage.getItem(uic+"_departures").then(item => {
 			if(item) {
 				resolve(item)
@@ -318,14 +317,15 @@ const getService = (t, uic, more = null, livemap = [], vehiculeJourneys = []) =>
 			};
 		}
 	} else {
-		train.route.line.type = (t.ligne.type == "RER") ? "rer" : 
-								((t.trainNumber >= 110000 && t.trainNumber <= 169999 && t.ligne.type == "TRAIN") ? "transilien" : 
+		train.route.line.type = (t.ligne.type == "RER") ? "rer" :
+								((t.trainNumber >= 110000 && t.trainNumber <= 169999 && t.ligne.type == "TRAIN") ? "transilien" :
 								(((t.trainNumber >= 830000 || (t.trainNumber >= 16750 && t.trainNumber <= 168749)) && t.ligne.type == "TRAIN") ? "ter" : "TRAIN"))
 	}
 	//return new Promise((resolve, reject) => {
-		console.log(_.find(vehiculeJourneys, function(obj) {
+		const vjourney = _.find(vehiculeJourneys, function(obj) {
 			return obj.stop_times[0].headsign === train.number;
-		}));
+		});
+		console.log(vjourney,train.number);
 		return Promise.all([getVehiculeJourney(train, t), getRoute(train, t)])
 		.then(result => {
 			let late = 0;
@@ -357,7 +357,7 @@ const getService = (t, uic, more = null, livemap = [], vehiculeJourneys = []) =>
 				} else {
 					train.journey_redux = result[0]
 				}
-				
+
 				train.journey_text = train.journey_redux.length == 0 ? (train.departure == train.terminus ? "terminus" : "Desserte indisponible") : _.join(_.map(train.journey_redux, (o) => {
 					return o.stop_point.name + (o.departure_time != "*" ? " (" +moment(o.departure_time, 'HHmmss').add(late, 'm').format('HH[h]mm') + ")" : '');
 				}), ' • ');
@@ -379,7 +379,7 @@ const getService = (t, uic, more = null, livemap = [], vehiculeJourneys = []) =>
 				}
 			}
 			train.expectedDepartureTime = moment(train.expectedDepartureTime).format('LT');
-	
+
 			train.route.line = _.pickBy(train.route.line, _.identity);
 			train.route = _.pickBy(train.route, _.identity);
 			return _.pickBy(train, _.identity)
@@ -398,14 +398,14 @@ module.exports = Departures = {
 			long: req.query.long
 		}
 		let liveMap, moreInfos, trainsJsonBrut;
-		
+
 		Promise.all([LiveMap(gps).catch(err => logWritter(err)), getMoreInformations(uic), getSNCFRealTimeApi(tr3a), getTheoriqueDepartures(uic)])
 		.then(values => {
 			liveMap = values[0];
-			moreInfos = values[1]; 
+			moreInfos = values[1];
 			trainsJsonBrut = values[2];
 			trainsDepartures = values[3];
-			
+
 			return new Promise(resolve => {
 				if(!_.isEmpty(trainsJsonBrut) && !_.isEmpty(moreInfos)){
 						Promise.all(trainsJsonBrut.brut.slice(0,6).map(train => getService(train, uic, moreInfos, liveMap, trainsDepartures)))
