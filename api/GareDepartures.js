@@ -127,7 +127,6 @@ const getVehiculeJourney = (train, t = null) => {
 	})
 }
 
-let departurejourney;
 const getVehiculeJourneys = (uic, href) => {
 	return new Promise(function(resolve) {
 		let linknext;
@@ -157,16 +156,16 @@ const getVehiculeJourneys = (uic, href) => {
 	});
 }
 
-const getTheoriqueDepartures = (uic) => {
+const saveVehiculeJourneys = (uic) => {
 	return new Promise(resolve => {
 
-		storage.getItem(uic+"_departures").then(item => {
+		storage.getItem(uic+":vehicle_journeys").then(item => {
 			if(item) {
 				resolve(item)
 			} else {
 				return getVehiculeJourneys(uic, `https://api.sncf.com/v1/coverage/sncf/stop_areas/stop_area:OCE:SA:${uic}/vehicle_journeys?count=1000&since=${moment().format('YYYYMMDD[T000000]')}&until=${moment().format('YYYYMMDD[T235959]')}&disable_geojson=true&`)
 				.then(departures=>{
-					storage.setItem(uic+"_departures", departures, {ttl: moment().hour(0).minute(0).second(0).add(1,'d').diff(moment(), 'milliseconds') }).then(()=> {resolve(departures)}).catch(err => resolve({}));
+					storage.setItem(uic+":vehicle_journeys", departures, {ttl: moment().hour(0).minute(0).second(0).add(1,'d').diff(moment(), 'milliseconds') }).then(()=> {resolve(departures)}).catch(err => resolve({}));
 				})
 			}
 		})
@@ -197,6 +196,36 @@ const getRoute = (train, t = null) => {
 			}
 		});
 	});
+}
+
+const getRoutes = (uic) => {
+	return new Promise(function(resolve) {
+
+		return axios.get(`https://api.sncf.com/v1/coverage/sncf/stop_areas/stop_area:OCE:SA:${uic}/routes?count=1000&`, {
+			headers: {
+				'Authorization': SNCFAPI_KEY
+			}
+		})
+		.then(response => {
+			resolve(response.data.routes);
+		})
+		.catch(err => logWritter(err))
+	});
+}
+
+const saveRoutes = (uic) => {
+	return new Promise(resolve => {
+		storage.getItem(uic+":routes").then(item => {
+			if(item) {
+				resolve(item)
+			} else {
+				return getRoutes(uic)
+				.then(routes=>{
+					storage.setItem(uic+":routes", routes, {ttl: moment().hour(0).minute(0).second(0).add(1,'d').diff(moment(), 'milliseconds') }).then(()=> {resolve(routes)}).catch(err => resolve({}));
+				})
+			}
+		})
+	})
 }
 
 const getUIC = (tr3a) => {
@@ -246,7 +275,7 @@ const logWritter = (err) => {
 	fs.appendFile('log.txt',text,()=>{return {}});
 }
 
-const getService = (t, uic, more = null, livemap = [], vehiculeJourneys = []) => {
+const getService = (t, uic, more = null, livemap = [], vehiculeJourneys = [], routes = []) => {
 	const SncfMore = more ? _.find(more.listeHoraires.horaire, {circulation:{numero: t.trainNumber}}) : false;
 	const train = {
 		name: t.trainMissionCode,
@@ -321,72 +350,83 @@ const getService = (t, uic, more = null, livemap = [], vehiculeJourneys = []) =>
 								((t.trainNumber >= 110000 && t.trainNumber <= 169999 && t.ligne.type == "TRAIN") ? "transilien" :
 								(((t.trainNumber >= 830000 || (t.trainNumber >= 16750 && t.trainNumber <= 168749)) && t.ligne.type == "TRAIN") ? "ter" : "TRAIN"))
 	}
-	//return new Promise((resolve, reject) => {
+	const listVehicleJourneys = new Promise((resolve, reject) => {
 		const vjourney = _.find(vehiculeJourneys, function(obj) {
-			return obj.stop_times[0].headsign === train.number;
+			 return _.some(obj.stop_times, ['headsign', train.number]) || obj.name == train.number
 		});
-		console.log(vjourney,train.number);
-		return Promise.all([getVehiculeJourney(train, t), getRoute(train, t)])
-		.then(result => {
-			let late = 0;
-			//si get vehicule journey
-			if(!_.isEmpty(result[0])){
-				if(result[0].vehicle_journeys){
-					train.journey = result[0].vehicle_journeys[0].stop_times;
-					let ok = false;
-					train.journey_redux = _.compact(_.map(train.journey, (o) => { // recevoir seulement la suite
-						if (ok) {
-							return o;
+		
+		if(!_.isEmpty(vjourney)) {
+			console.log(vjourney.name,train.name);
+			resolve(vjourney)
+		}
+		else {
+			getListPassage(t)
+			.then(response => resolve(response))
+			.catch(err => resolve({}))
+		}
+	})
+	console.log(routes[0].name)
+	return Promise.all([listVehicleJourneys, getRoute(train, t)])
+	.then(result => {
+		let late = 0;
+		//si get vehicule journey
+		if(!_.isEmpty(result[0])){
+			if(result[0].id){
+				train.journey = result[0].stop_times;
+				let ok = false;
+				train.journey_redux = _.compact(_.map(train.journey, (o) => { // recevoir seulement la suite
+					if (ok) {
+						return o;
+					}
+					const ouic = o.stop_point.id.split("-").pop();
+					const start = (ouic == uic || (ouic == '87391102' && uic == '87391003'));
+					if(start) {
+						// verifications horaires chevauchement entre deux jours
+						if (moment(o.departure_time, 'HHmmss').diff(moment(train.expectedDepartureTime), 'd') > 0 || moment(train.expectedDepartureTime) > moment().endOf('day')) {
+							train.aimedDepartureTime = moment(o.departure_time, 'HHmmss').add(1, 'd');
+						} else {
+							train.aimedDepartureTime = moment(o.departure_time, 'HHmmss');
 						}
-						const ouic = o.stop_point.id.split("-").pop();
-						const start = (ouic == uic || (ouic == '87391102' && uic == '87391003'));
-						if(start) {
-							// verifications horaires chevauchement entre deux jours
-							if (moment(o.departure_time, 'HHmmss').diff(moment(train.expectedDepartureTime), 'd') > 0 || moment(train.expectedDepartureTime) > moment().endOf('day')) {
-								train.aimedDepartureTime = moment(o.departure_time, 'HHmmss').add(1, 'd');
-							} else {
-								train.aimedDepartureTime = moment(o.departure_time, 'HHmmss');
-							}
-							// les minutes de retards ☢⚠ très important ⚠☢
-							late = moment(train.expectedDepartureTime).diff(moment(train.aimedDepartureTime), "m");
-							train.state = (late !== null ? (late !== 0 ? `${(late<0?"":"+") + late} min` : train.state) : null);
-							train.aimedDepartureTime = moment(train.aimedDepartureTime).format('LT');
-						}
-						ok = start;
-					}));
-				} else {
-					train.journey_redux = result[0]
-				}
-
-				train.journey_text = train.journey_redux.length == 0 ? (train.departure == train.terminus ? "terminus" : "Desserte indisponible") : _.join(_.map(train.journey_redux, (o) => {
-					return o.stop_point.name + (o.departure_time != "*" ? " (" +moment(o.departure_time, 'HHmmss').add(late, 'm').format('HH[h]mm') + ")" : '');
-				}), ' • ');
-				train.journey_text_html = _.join(_.map(train.journey_redux, (o) => {
-					return o.stop_point.name + (o.departure_time != "*" ? "<small> "+moment(o.departure_time, 'HHmmss').add(late, 'm').format('HH[:]mm')+"</small>" : '');
-				}), ' <span class="dot-separator">•</span> ');
+						// les minutes de retards ☢⚠ très important ⚠☢
+						late = moment(train.expectedDepartureTime).diff(moment(train.aimedDepartureTime), "m");
+						train.state = (late !== null ? (late !== 0 ? `${(late<0?"":"+") + late} min` : train.state) : null);
+						train.aimedDepartureTime = moment(train.aimedDepartureTime).format('LT');
+					}
+					ok = start;
+				}));
+			} else {
+				train.journey_redux = result[0]
 			}
-			// si get route
-			if(!_.isEmpty(result[1])){
-				if(result[1].routes) {
-					const troute = result[1].routes[0];
-					train.route.name = troute.name;
-					train.route.line.color = troute.line.color;
-					train.route.line.code = troute.line.code ? troute.line.code : (SncfMore && SncfMore.circulation.ligne ? SncfMore.circulation.ligne.libelleNumero: '');
-					train.route.line.name = troute.line.name;
-				}
-				else {
-					train.route.line = result[1];
-				}
-			}
-			train.expectedDepartureTime = moment(train.expectedDepartureTime).format('LT');
 
-			train.route.line = _.pickBy(train.route.line, _.identity);
-			train.route = _.pickBy(train.route, _.identity);
-			return _.pickBy(train, _.identity)
-		})
-		.then(data => {return data})
-		.catch(err => {return {}})
-	//})
+			train.journey_text = train.journey_redux.length == 0 ? (train.departure == train.terminus ? "terminus" : "Desserte indisponible") : _.join(_.map(train.journey_redux, (o) => {
+				return o.stop_point.name + (o.departure_time != "*" ? " (" +moment(o.departure_time, 'HHmmss').add(late, 'm').format('HH[h]mm') + ")" : '');
+			}), ' • ');
+			train.journey_text_html = _.join(_.map(train.journey_redux, (o) => {
+				return o.stop_point.name + (o.departure_time != "*" ? "<small> "+moment(o.departure_time, 'HHmmss').add(late, 'm').format('HH[:]mm')+"</small>" : '');
+			}), ' <span class="dot-separator">•</span> ');
+		}
+		// si get route
+		if(!_.isEmpty(result[1])){
+			if(result[1].routes) {
+				const troute = result[1].routes[0];
+				train.route.name = troute.name;
+				train.route.line.color = troute.line.color;
+				train.route.line.code = troute.line.code ? troute.line.code : (SncfMore && SncfMore.circulation.ligne ? SncfMore.circulation.ligne.libelleNumero: '');
+				train.route.line.name = troute.line.name;
+			}
+			else {
+				train.route.line = result[1];
+			}
+		}
+		train.expectedDepartureTime = moment(train.expectedDepartureTime).format('LT');
+
+		train.route.line = _.pickBy(train.route.line, _.identity);
+		train.route = _.pickBy(train.route, _.identity);
+		return _.pickBy(train, _.identity)
+	})
+	.then(data => {return data})
+	.catch(err => {return {}})
+	
 }
 
 module.exports = Departures = {
@@ -399,16 +439,17 @@ module.exports = Departures = {
 		}
 		let liveMap, moreInfos, trainsJsonBrut;
 
-		Promise.all([LiveMap(gps).catch(err => logWritter(err)), getMoreInformations(uic), getSNCFRealTimeApi(tr3a), getTheoriqueDepartures(uic)])
+		Promise.all([LiveMap(gps).catch(err => logWritter(err)), getMoreInformations(uic), getSNCFRealTimeApi(tr3a), saveVehiculeJourneys(uic), saveRoutes(uic)])
 		.then(values => {
 			liveMap = values[0];
 			moreInfos = values[1];
 			trainsJsonBrut = values[2];
 			trainsDepartures = values[3];
+			trainsRoutes = values[4];
 
 			return new Promise(resolve => {
 				if(!_.isEmpty(trainsJsonBrut) && !_.isEmpty(moreInfos)){
-						Promise.all(trainsJsonBrut.brut.slice(0,6).map(train => getService(train, uic, moreInfos, liveMap, trainsDepartures)))
+						Promise.all(trainsJsonBrut.brut.slice(0,6).map(train => getService(train, uic, moreInfos, liveMap, trainsDepartures, trainsRoutes)))
 						.then(sncf => {
 							storage.setItem(uic, sncf).then(()=> {resolve(sncf)})
 						})
