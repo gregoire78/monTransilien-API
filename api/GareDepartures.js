@@ -365,7 +365,6 @@ const getService = (t, uic, more = null, livemap = [], vehiculeJourneys = [], ro
 			.catch(err => resolve({}))
 		}
 	})
-	console.log(routes[0].name)
 	return Promise.all([listVehicleJourneys, getRoute(train, t)])
 	.then(result => {
 		let late = 0;
@@ -439,17 +438,16 @@ module.exports = Departures = {
 		}
 		let liveMap, moreInfos, trainsJsonBrut;
 
-		Promise.all([LiveMap(gps).catch(err => logWritter(err)), getMoreInformations(uic), getSNCFRealTimeApi(tr3a), saveVehiculeJourneys(uic), saveRoutes(uic)])
+		Promise.all([LiveMap(gps).catch(err => logWritter(err)), getMoreInformations(uic), getSNCFRealTimeApi(tr3a), saveVehiculeJourneys(uic)])
 		.then(values => {
 			liveMap = values[0];
 			moreInfos = values[1];
 			trainsJsonBrut = values[2];
 			trainsDepartures = values[3];
-			trainsRoutes = values[4];
 
 			return new Promise(resolve => {
 				if(!_.isEmpty(trainsJsonBrut) && !_.isEmpty(moreInfos)){
-						Promise.all(trainsJsonBrut.brut.slice(0,6).map(train => getService(train, uic, moreInfos, liveMap, trainsDepartures, trainsRoutes)))
+						Promise.all(trainsJsonBrut.brut.slice(0,6).map(train => getService(train, uic, moreInfos, liveMap, trainsDepartures)))
 						.then(sncf => {
 							storage.setItem(uic, sncf).then(()=> {resolve(sncf)})
 						})
